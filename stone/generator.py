@@ -168,7 +168,7 @@ class Generator(object):
         the class variable tabs_for_indents. If dent is None, indentation will
         increase by either four spaces or one tab.
         """
-        assert dent is None or dent > 0, 'dent must be a whole number.'
+        assert dent is None or dent >= 0, 'dent must be >= 0.'
         if dent is None:
             if self.tabs_for_indents:
                 dent = 1
@@ -214,6 +214,14 @@ class Generator(object):
             self.emit_raw('%s%s\n' % (self.make_indent(), s))
         else:
             self.emit_raw('\n')
+
+    def emit_spaced(self, s=''):
+        """
+        Wrapper around `emit` function to output line with an empty subsequent
+        line.
+        """
+        self.emit(s)
+        self.emit()
 
     def emit_wrapped_text(self, s, prefix='', initial_prefix='', subsequent_prefix='',
                           width=80, break_long_words=False, break_on_hyphens=False):
