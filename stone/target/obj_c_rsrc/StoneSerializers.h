@@ -16,6 +16,15 @@
 @end
 
 
+@interface NSArray (Serializable) <Serializable>
+
++ (NSDictionary * _Nonnull)serialize:(id _Nonnull)obj;
+
++ (id _Nonnull)deserialize:(NSDictionary * _Nonnull)dict;
+
+@end
+
+
 @interface StringSerializer : NSObject
 
 + (NSString * _Nonnull)serialize:(NSString * _Nonnull)value;

@@ -327,7 +327,7 @@ def fmt_default_value(field):
             bool_str = 'YES'
         else:
             bool_str = 'NO'
-        return '[NSNumber numberWithBool:{}]'.format(bool_str)
+        return '@{}'.format(bool_str)
     else:
         raise TypeError('Can\'t handle default value type %r' % type(field.data_type))
 

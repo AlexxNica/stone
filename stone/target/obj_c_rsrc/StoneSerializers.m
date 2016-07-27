@@ -4,6 +4,19 @@
 
 #import "StoneSerializers.h"
 
+@implementation NSArray (Serializable)
+
++ (NSDictionary * _Nonnull)serialize:(id _Nonnull)obj {
+    return obj;
+}
+
++ (id _Nonnull)deserialize:(NSDictionary * _Nonnull)dict {
+    return dict;
+}
+
+@end
+
+
 @implementation StringSerializer
 
 + (NSString *)serialize:(NSString *)value {
@@ -169,23 +182,21 @@
 @implementation ArraySerializer
 
 + (NSArray *)serialize:(NSArray *)value withBlock:(id (^)(id obj))withBlock {
-    NSMutableArray *resultArray = [[NSMutableArray alloc] initWithArray:value copyItems:YES];
-
-    [value enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
-        id newObj = withBlock(obj);
-        [resultArray addObject:newObj];
-    }];
+    NSMutableArray *resultArray = [[NSMutableArray alloc] init];
+    
+    for (id element in value) {
+        [resultArray addObject:withBlock(element)];
+    }
     
     return resultArray;
 }
 
 + (NSArray *)deserialize:(NSArray *)value withBlock:(id (^)(id obj))withBlock {
-    NSMutableArray *resultArray = [[NSMutableArray alloc] initWithArray:value copyItems:YES];
-
-    [value enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
-        id newObj = withBlock(obj);
-        [resultArray addObject:newObj];
-    }];
+    NSMutableArray *resultArray = [[NSMutableArray alloc] init];
+    
+    for (id element in value) {
+        [resultArray addObject:withBlock(element)];
+    }
     
     return resultArray;
 }

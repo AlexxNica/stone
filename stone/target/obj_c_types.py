@@ -143,6 +143,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             self._generate_struct_cstor(struct)
             self._generate_struct_cstor_default(struct)
             self._generate_serializable_funcs(struct_name)
+            self._generate_description_func(struct_name)
 
         self.emit()
         self.emit()
@@ -164,6 +165,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             self._generate_struct_cstor_signature(struct)
             self._generate_struct_cstor_signature_default(struct)
             self._generate_serializable_signatures()
+            self._generate_description_signature()
 
         self.emit()
         self.emit()
@@ -182,6 +184,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             self._generate_union_tag_state_funcs(union.all_fields, union_name)
             self._generate_union_tag_vars_funcs(union.all_fields, union_name)
             self._generate_serializable_funcs(union_name)
+            self._generate_description_func(union_name)
 
         self.emit()
         self.emit()
@@ -203,6 +206,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             self._generate_union_cstor_signatures(union.all_fields)
             self._generate_union_tag_access_signatures(union.all_fields, union_name)
             self._generate_serializable_signatures()
+            self._generate_description_signature()
             self._generate_union_tag_property(union_name)
             self._generate_union_properties(union.all_fields)
 
@@ -229,7 +233,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     self._cstor_name_from_fields(super_fields), fmt_func_args(
                         [(fmt_var(f.name), fmt_var(f.name)) for f in super_fields])))
             else:
-                self.emit('self = [self init];')
+                self.emit('self = [super init];')
             with self.block_init():
                 for field in struct.fields:
                     if field.has_default:
@@ -273,10 +277,6 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self.emit(signature)
         self.emit()
 
-    def _struct_has_defaults(self, struct):
-        """Returns whether the given struct has any default values."""
-        return [f for f in struct.all_fields if f.has_default]
-
     def _generate_union_cstor_funcs(self, fields, union_name):
         """Emits standard union constructor."""
         enum_type = '{}Tag'.format(union_name)
@@ -286,7 +286,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             func_args = [] if is_void_type(field.data_type) else fmt_func_args_from_fields([field])
 
             with self.block_func(self._cstor_name_from_field(field), func_args, 'instancetype'):
-                self.emit('self = [self init];')
+                self.emit('self = [super init];')
                 with self.block_init():
                     self.emit('_tag = ({}){};'.format(enum_type, enum_field_name))
                     if not is_void_type(field.data_type):
@@ -347,6 +347,17 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self.emit(serial_signature)
         self.emit()
         self.emit(deserial_signature)
+        self.emit()
+
+    def _generate_description_signature(self):
+        signature = fmt_signature('description', [], 'NSString * _Nonnull')
+        self.emit(signature)
+        self.emit()
+
+    def _generate_description_func(self, data_type_name):
+        with self.block_func('description', [], 'NSString *'):
+            self.emit('return [[{}Serializer serialize:{}] description];'.format(fmt_class(data_type_name), fmt_func_args([('valueObj', 'self')])))
+
         self.emit()
 
     def _cstor_args_from_fields(self, fields, is_struct=False):
@@ -479,7 +490,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     assert len(tags) == 1, tags
                     tag = tags[0]
 
-                    with self.block('if ([valueDict[@"tag"] isEqualToString:@"{}"])'.format(fmt_var(tag))):
+                    with self.block('if ([valueDict[@".tag"] isEqualToString:@"{}"])'.format(fmt_var(tag))):
                         self.emit('return [{}Serializer deserialize:valueDict];'.format(fmt_class(subtype.name)))
 
                 self.emit()
@@ -519,7 +530,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
     def _generate_union_deserializer(self, union):
         """Emits the deserialize method for the serialization object for the given union."""
         with self.block_func('deserialize', fmt_func_args_declaration([('valueDict', 'NSDictionary *')]), return_type='{} *'.format(fmt_class(union.name)), class_method=True):            
-            self.emit('NSString *tag = valueDict[@"tag"];')
+            self.emit('NSString *tag = valueDict[@".tag"];')
             self.emit()
 
             for field in union.all_fields:
@@ -585,9 +596,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     route_name = '{}{}'.format(fmt_camel(namespace.name), fmt_camel_upper(route.name))
  
                     if route.deprecated:
-                        deprecated = '[NSNumber numberWithBool:{}]'.format('YES')
+                        deprecated = '@{}'.format('YES')
                     else:
-                        deprecated = '[NSNumber numberWithBool:{}]'.format('NO')
+                        deprecated = '@{}'.format('NO')
 
                     if not is_void_type(route.result_data_type):
                         result_type = '[{} class]'.format(fmt_class_type(route.result_data_type))

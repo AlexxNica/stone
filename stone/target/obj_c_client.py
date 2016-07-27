@@ -16,6 +16,7 @@ from stone.data_type import (
     unwrap_nullable,
 )
 from stone.target.obj_c_helpers import (
+    fmt_alloc_call,
     fmt_camel,
     fmt_camel_upper,
     fmt_class,
@@ -119,8 +120,8 @@ class ObjCGenerator(ObjCBaseGenerator):
 
         with self.block_m('{}'.format(self.args.class_name)):
 
-            with self.block_func('init', fmt_func_args_declaration([('client', '{} *'.format(self.args.transport_client_name))]), return_type='nonnull instancetype'):
-                self.emit('self = [self init];')
+            with self.block_func('init', fmt_func_args_declaration([('client', '{} *'.format(self.args.transport_client_name))]), return_type='instancetype'):
+                self.emit('self = [super init];')
 
                 with self.block_init():
                     for namespace in api.namespaces.values():
@@ -148,47 +149,58 @@ class ObjCGenerator(ObjCBaseGenerator):
                     self.emit(fmt_property_str(fmt_var(namespace.name), '{}Routes * _Nonnull'.format(fmt_camel_upper(namespace.name))))
 
     def _generate_routes_m(self, namespace):
-        """Generates namespace object that has as methods all routes within the namespace."""
+        """Generates implementation file for namespace object that has as methods
+        all routes within the namespace."""
         self.emit_raw(stone_warning)
-
-        route_objs_name = '{}RouteObjects'.format(fmt_camel_upper(namespace.name))
 
         import_classes = ['{}Routes'.format(fmt_class(namespace.name))]
         import_classes.append(self.args.transport_client_name)
-        import_classes.append(route_objs_name)
+        import_classes.append('{}RouteObjects'.format(fmt_camel_upper(namespace.name)))
         import_classes.append('StoneBase')
         import_classes += self._get_imports_m(self._get_namespace_route_imports(namespace), [])
         self._generate_imports_m(import_classes)
 
         with self.block_m('{}Routes'.format(fmt_camel_upper(namespace.name))):
-            with self.block_func('init', fmt_func_args_declaration([('client', '{} *'.format(self.args.transport_client_name))]), return_type='nonnull instancetype'):
-                self.emit('self = [self init];')
+            with self.block_func('init', fmt_func_args_declaration([('client', '{} *'.format(self.args.transport_client_name))]), return_type='instancetype'):
+                self.emit('self = [super init];')
                 with self.block_init():
                     self.emit('_client = client;')
 
             for route in namespace.routes:
-                route_type = route.attrs.get('style')
+                if is_struct_type(route.arg_data_type) and self._struct_has_defaults(route.arg_data_type):
+                    arg_list, _ = self._get_default_route_args(namespace, route)
+                    self._generate_route(route, namespace, arg_list)
 
-                self.emit()
+                arg_list, _ = self._get_route_args(namespace, route)
+                self._generate_route(route, namespace, arg_list)
+    
+    def _generate_route(self, route, namespace, arg_list):
+        """Generates route method implementation for the given route."""
+        route_arg_args_str = fmt_func_args_declaration(arg_list)
+        cstor_name = self._cstor_name_from_fields_names(arg_list)
 
-                arg_list, doc_list = self._get_route_args(namespace, route)
+        result_type = '{} _Nullable'.format(fmt_type(route.result_data_type)) if not is_void_type(route.result_data_type) else ''
+        arg_list.append(('success', 'void (^ _Nullable)({})'.format(result_type)))
+        arg_list.append(('fail', 'void (^)(DropboxError *error)'))
 
-                route_arg_args_str = fmt_func_args_declaration(arg_list)
+        args_str = fmt_func_args_declaration(arg_list)
 
-                result_type = '{} _Nullable'.format(fmt_type(route.result_data_type)) if not is_void_type(route.result_data_type) else ''
-                arg_list.append(('success', 'void (^ _Nullable)({})'.format(result_type)))
-                arg_list.append(('fail', 'void (^)(DropboxError *error)'))
+        with self.block_func(fmt_var(route.name), args_str):
+            self.emit('Route *route = {}.{};'.format('{}RouteObjects'.format(fmt_camel_upper(namespace.name)), '{}{}'.format(fmt_camel(namespace.name), fmt_camel_upper(route.name))))
+            if is_union_type(route.arg_data_type):
+                self.emit('{} *arg = {};'.format(fmt_class(route.arg_data_type.name), fmt_var(route.arg_data_type.name)))
+            elif not is_void_type(route.arg_data_type):
+                self.emit('{} *arg = {};'.format(
+                    fmt_class(route.arg_data_type.name), fmt_func_call(fmt_alloc_call(
+                        fmt_class(route.arg_data_type.name)), cstor_name, route_arg_args_str)))
 
-                args_str = fmt_func_args_declaration(arg_list)
+            self.emit('{};'.format(fmt_func_call('self.client', 'request', fmt_func_args([('route', 'route'), ('param', 'arg' if not is_void_type(route.arg_data_type) else 'nil'), ('success', 'success'), ('fail', 'fail')]))))             
 
-                with self.block_func(fmt_var(route.name), args_str):
-                    self.emit('Route *route = {}.{};'.format(route_objs_name, '{}{}'.format(fmt_camel(namespace.name), fmt_camel_upper(route.name))))
-                    if not is_void_type(route.arg_data_type):
-                        self.emit('{} *arg = [[{} alloc] {}:{}];'.format(fmt_class(route.arg_data_type.name), fmt_class(route.arg_data_type.name), self._cstor_name_from_fields(route.arg_data_type.all_fields), route_arg_args_str))
-
-                    self.emit('{};'.format(fmt_func_call('self.client', 'request', fmt_func_args([('route', 'route'), ('param', 'arg' if not is_void_type(route.arg_data_type) else 'nil'), ('success', 'success'), ('fail', 'fail')]))))             
+        self.emit()
 
     def _generate_routes_h(self, namespace):
+        """Generates header file for namespace object that has as methods
+        all routes within the namespace."""
         self.emit_raw(stone_warning)
 
         import_classes = ['{}Routes'.format(fmt_class(namespace.name))]
@@ -204,37 +216,47 @@ class ObjCGenerator(ObjCBaseGenerator):
             self.emit()
 
             for route in namespace.routes:
+                if is_struct_type(route.arg_data_type) and self._struct_has_defaults(route.arg_data_type):
+                    arg_list, doc_list = self._get_default_route_args(namespace, route)
+                    self._generate_route_signature(route, namespace, arg_list, doc_list)
+
                 arg_list, doc_list = self._get_route_args(namespace, route)
-                result_type = '{} _Nullable'.format(fmt_type(route.result_data_type)) if not is_void_type(route.result_data_type) else ''
-                arg_list.append(('success', 'void (^ _Nullable)({})'.format(result_type)))
-                arg_list.append(('fail', 'void (^ _Nullable)(DropboxError * _Nonnull error)'))
-
-                self.emit(comment_prefix)
-                if route.doc:
-                    route_doc = self.process_doc(route.doc, self._docf)
-                else:
-                    route_doc = 'The {} route'.format(func_name)
-                self.emit_wrapped_text(route_doc, prefix=comment_prefix, width=120)
-                self.emit(comment_prefix)
-
-                for name, doc in doc_list:
-                    self.emit_wrapped_text('- parameter {}: {}'.format(name, doc if doc else undocumented), prefix=comment_prefix, width=120)
-                self.emit(comment_prefix)
-                output = ('- returns: Through the response callback, the caller will ' +
-                                 'receive a `{}` object on success or a `{}` object on failure.')
-                output = output.format(fmt_type(route.result_data_type, tag=True),
-                                       fmt_type(route.error_data_type, tag=True))
-                self.emit_wrapped_text(output, prefix=comment_prefix, width=120)
-                self.emit(comment_prefix)
-
-                args_str = fmt_func_args_declaration(arg_list)
-
-                self.emit(fmt_signature(fmt_var(route.name), args_str, 'void'))
-                self.emit()
+                self._generate_route_signature(route, namespace, arg_list, doc_list)
 
             self.emit(fmt_property_str('client', '{} * _Nonnull'.format(fmt_class(self.args.transport_client_name))))                    
 
+    def _generate_route_signature(self, route, namespace, arg_list, doc_list):
+        """Generates route method signature for the given route."""
+        result_type = '{} _Nullable'.format(fmt_type(route.result_data_type)) if not is_void_type(route.result_data_type) else ''
+        arg_list.append(('success', 'void (^ _Nullable)({})'.format(result_type)))
+        arg_list.append(('fail', 'void (^ _Nullable)(DropboxError * _Nonnull error)'))
+
+        self.emit(comment_prefix)
+        if route.doc:
+            route_doc = self.process_doc(route.doc, self._docf)
+        else:
+            route_doc = 'The {} route'.format(func_name)
+        self.emit_wrapped_text(route_doc, prefix=comment_prefix, width=120)
+        self.emit(comment_prefix)
+
+        for name, doc in doc_list:
+            self.emit_wrapped_text('- parameter {}: {}'.format(name, doc if doc else undocumented), prefix=comment_prefix, width=120)
+        self.emit(comment_prefix)
+        output = ('- returns: Through the response callback, the caller will ' +
+                         'receive a `{}` object on success or a `{}` object on failure.')
+        output = output.format(fmt_type(route.result_data_type, tag=True),
+                               fmt_type(route.error_data_type, tag=True))
+        self.emit_wrapped_text(output, prefix=comment_prefix, width=120)
+        self.emit(comment_prefix)
+
+        args_str = fmt_func_args_declaration(arg_list)
+
+        self.emit(fmt_signature(fmt_var(route.name), args_str, 'void'))
+        self.emit()
+
     def _get_route_args(self, namespace, route):
+        """Returns a list of name / value string pairs representing the arguments for
+        a particular route."""
         data_type = route.arg_data_type
         arg_type = fmt_type(data_type, tag=True)
         if is_struct_type(data_type):
@@ -253,4 +275,24 @@ class ObjCGenerator(ObjCBaseGenerator):
         else:
             arg_list = [] if is_void_type(route.arg_data_type) else [('request', arg_type)]
             doc_list = []
+
+        return arg_list, doc_list
+
+    def _get_default_route_args(self, namespace, route):
+        """Returns a list of name / value string pairs representing the default arguments for
+        a particular route."""
+        data_type = route.arg_data_type
+        arg_type = fmt_type(data_type, tag=True)
+        if is_struct_type(data_type):
+            arg_list = []
+            for field in data_type.all_fields:
+                unwrapped_data_type, nullable = unwrap_nullable(field.data_type)
+                if not field.has_default:
+                    arg_list.append((fmt_var(field.name), fmt_type(unwrapped_data_type, tag=True)))
+
+            doc_list = [(fmt_var(f.name), self.process_doc(f.doc, self._docf)) for f in data_type.fields if f.doc and not f.has_default]
+        else:
+            arg_list = []
+            doc_list = []
+
         return arg_list, doc_list

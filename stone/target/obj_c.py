@@ -245,6 +245,18 @@ class ObjCBaseGenerator(CodeGenerator):
         the name of the supplied argument."""
         return 'initWith{}'.format(fmt_camel_upper(field.name))
 
+    def _cstor_name_from_fields_names(self, fields_names):
+        """Returns an Obj C appropriate name for a constructor based on
+        the name of the first argument."""
+        if fields_names:
+            return 'initWith{}'.format(fmt_camel_upper(fields_names[0][0]))
+        else:
+            return 'init'
+
+    def _struct_has_defaults(self, struct):
+        """Returns whether the given struct has any default values."""
+        return [f for f in struct.all_fields if f.has_default]
+
     def _docf(self, tag, val):
         if tag == 'route':
             return fmt_func(val)
