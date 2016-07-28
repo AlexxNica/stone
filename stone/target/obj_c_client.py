@@ -20,6 +20,7 @@ from stone.target.obj_c_helpers import (
     fmt_camel,
     fmt_camel_upper,
     fmt_class,
+    fmt_class_prefix,
     fmt_func,
     fmt_func_args,
     fmt_func_args_declaration,
@@ -96,10 +97,10 @@ class ObjCGenerator(ObjCBaseGenerator):
         for namespace in api.namespaces.values():
             ns_class = fmt_class(namespace.name)
             if namespace.routes:
-                with self.output_to_relative_path('Routes/{}Routes.m'.format(ns_class)):
+                with self.output_to_relative_path('Routes/Dbx{}Routes.m'.format(ns_class)):
                     self._generate_routes_m(namespace)
 
-                with self.output_to_relative_path('Routes/{}Routes.h'.format(ns_class)):
+                with self.output_to_relative_path('Routes/Dbx{}Routes.h'.format(ns_class)):
                     self._generate_routes_h(namespace)
 
         with self.output_to_relative_path('Client/{}.m'.format(self.args.module_name)):
@@ -113,7 +114,7 @@ class ObjCGenerator(ObjCBaseGenerator):
         have an object field that encapsulates each route in the particular namespace."""
         self.emit_raw(base)
 
-        import_classes = ['{}Routes'.format(fmt_camel_upper(ns.name)) for ns in api.namespaces.values() if ns.routes]
+        import_classes = ['Dbx{}Routes'.format(fmt_camel_upper(ns.name)) for ns in api.namespaces.values() if ns.routes]
         import_classes.append(self.args.transport_client_name)
         import_classes.append(self.args.module_name)
         self._generate_imports_m(import_classes)
@@ -126,7 +127,7 @@ class ObjCGenerator(ObjCBaseGenerator):
                 with self.block_init():
                     for namespace in api.namespaces.values():
                         if namespace.routes:
-                            self.emit('_{} = [[{}Routes alloc] init: client];'.format(fmt_var(namespace.name), fmt_camel_upper(namespace.name)))
+                            self.emit('_{} = [[Dbx{}Routes alloc] init: client];'.format(fmt_var(namespace.name), fmt_camel_upper(namespace.name)))
 
     def _generate_client_h(self, api):
         """Generates client base header file. For each namespace, the client will
@@ -135,7 +136,7 @@ class ObjCGenerator(ObjCBaseGenerator):
         self.emit('#import <Foundation/Foundation.h>')
         self.emit()
 
-        import_classes = ['{}Routes'.format(fmt_camel_upper(ns.name)) for ns in api.namespaces.values() if ns.routes]
+        import_classes = ['Dbx{}Routes'.format(fmt_camel_upper(ns.name)) for ns in api.namespaces.values() if ns.routes]
         import_classes.append(self.args.transport_client_name)
         self._generate_imports_h(import_classes)
 
@@ -145,22 +146,22 @@ class ObjCGenerator(ObjCBaseGenerator):
 
             for namespace in api.namespaces.values():
                 if namespace.routes:
-                    self.emit_wrapped_text('Routes within the {} namespace. See {}Routes for details.'.format(fmt_var(namespace.name), fmt_camel_upper(namespace.name)), prefix=comment_prefix)
-                    self.emit(fmt_property_str(fmt_var(namespace.name), '{}Routes * _Nonnull'.format(fmt_camel_upper(namespace.name))))
+                    self.emit_wrapped_text('Routes within the {} namespace. See Dbx{}Routes for details.'.format(fmt_var(namespace.name), fmt_camel_upper(namespace.name)), prefix=comment_prefix)
+                    self.emit(fmt_property_str(fmt_var(namespace.name), 'Dbx{}Routes * _Nonnull'.format(fmt_camel_upper(namespace.name))))
 
     def _generate_routes_m(self, namespace):
         """Generates implementation file for namespace object that has as methods
         all routes within the namespace."""
         self.emit_raw(stone_warning)
 
-        import_classes = ['{}Routes'.format(fmt_class(namespace.name))]
+        import_classes = ['Dbx{}Routes'.format(fmt_class(namespace.name))]
         import_classes.append(self.args.transport_client_name)
-        import_classes.append('{}RouteObjects'.format(fmt_camel_upper(namespace.name)))
-        import_classes.append('StoneBase')
+        import_classes.append('Dbx{}RouteObjects'.format(fmt_camel_upper(namespace.name)))
+        import_classes.append('DbxStoneBase')
         import_classes += self._get_imports_m(self._get_namespace_route_imports(namespace), [])
         self._generate_imports_m(import_classes)
 
-        with self.block_m('{}Routes'.format(fmt_camel_upper(namespace.name))):
+        with self.block_m('Dbx{}Routes'.format(fmt_camel_upper(namespace.name))):
             with self.block_func('init', fmt_func_args_declaration([('client', '{} *'.format(self.args.transport_client_name))]), return_type='instancetype'):
                 self.emit('self = [super init];')
                 with self.block_init():
@@ -186,13 +187,13 @@ class ObjCGenerator(ObjCBaseGenerator):
         args_str = fmt_func_args_declaration(arg_list)
 
         with self.block_func(fmt_var(route.name), args_str):
-            self.emit('Route *route = {}.{};'.format('{}RouteObjects'.format(fmt_camel_upper(namespace.name)), '{}{}'.format(fmt_camel(namespace.name), fmt_camel_upper(route.name))))
+            self.emit('DbxRoute *route = {}.dbx{};'.format('Dbx{}RouteObjects'.format(fmt_camel_upper(namespace.name)), '{}{}'.format(fmt_camel_upper(namespace.name), fmt_camel_upper(route.name))))
             if is_union_type(route.arg_data_type):
-                self.emit('{} *arg = {};'.format(fmt_class(route.arg_data_type.name), fmt_var(route.arg_data_type.name)))
+                self.emit('{} *arg = {};'.format(fmt_class_prefix(route.arg_data_type), fmt_var(route.arg_data_type.name)))
             elif not is_void_type(route.arg_data_type):
                 self.emit('{} *arg = {};'.format(
-                    fmt_class(route.arg_data_type.name), fmt_func_call(fmt_alloc_call(
-                        fmt_class(route.arg_data_type.name)), cstor_name, route_arg_args_str)))
+                    fmt_class_prefix(route.arg_data_type), fmt_func_call(fmt_alloc_call(
+                        fmt_class_prefix(route.arg_data_type)), cstor_name, route_arg_args_str)))
 
             self.emit('{};'.format(fmt_func_call('self.client', 'request', fmt_func_args([('route', 'route'), ('param', 'arg' if not is_void_type(route.arg_data_type) else 'nil'), ('success', 'success'), ('fail', 'fail')]))))             
 
@@ -203,7 +204,7 @@ class ObjCGenerator(ObjCBaseGenerator):
         all routes within the namespace."""
         self.emit_raw(stone_warning)
 
-        import_classes = ['{}Routes'.format(fmt_class(namespace.name))]
+        import_classes = ['Dbx{}Routes'.format(fmt_class(namespace.name))]
         import_classes.append('DropboxError')
         import_classes.append(self.args.transport_client_name)
         import_classes += self._get_imports_m(self._get_namespace_route_imports(namespace), [])
@@ -211,7 +212,7 @@ class ObjCGenerator(ObjCBaseGenerator):
 
         self.emit_wrapped_text('Routes for the {} namespace'.format(fmt_class(namespace.name)), prefix=comment_prefix)
 
-        with self.block_h('{}Routes'.format(fmt_class(namespace.name))):
+        with self.block_h('Dbx{}Routes'.format(fmt_class(namespace.name))):
             self.emit(fmt_signature('init', fmt_func_args_declaration([('client', '{} * _Nonnull'.format(self.args.transport_client_name))]), 'nonnull instancetype'))
             self.emit()
 
@@ -267,7 +268,7 @@ class ObjCGenerator(ObjCBaseGenerator):
             
             doc_list = [(fmt_var(f.name), self.process_doc(f.doc, self._docf)) for f in data_type.fields if f.doc]
         elif is_union_type(data_type):
-            arg_list = [(fmt_var(data_type.name), '{} * _Nonnull'.format(fmt_class(data_type.name)))]
+            arg_list = [(fmt_var(data_type.name), '{} * _Nonnull'.format(fmt_class_prefix(data_type)))]
             
             doc_list = [(fmt_var(data_type.name),
                 self.process_doc(data_type.doc, self._docf)

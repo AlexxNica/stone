@@ -7,7 +7,7 @@
 ///
 /// Validator functions used by SDK to impose value constraints.
 ///
-@interface StoneValidators<T> : NSObject {
+@interface DbxStoneValidators<T> : NSObject {
 
 }
 

@@ -26,8 +26,10 @@ from stone.target.obj_c_helpers import (
     fmt_camel,
     fmt_camel_upper,
     fmt_class,
+    fmt_class_prefix,
     fmt_class_type,
     fmt_default_value,
+    fmt_enum_name,
     fmt_func,
     fmt_func_args,
     fmt_func_args_declaration,
@@ -39,7 +41,6 @@ from stone.target.obj_c_helpers import (
     fmt_public_name,
     fmt_serial_obj,
     fmt_signature,
-    fmt_struct_init_args,
     fmt_type,
     fmt_validator,
     fmt_var,
@@ -78,20 +79,20 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         rsrc_folder = os.path.join(os.path.dirname(__file__), 'obj_c_rsrc')
         rsrc_output_folder = os.path.join(self.target_folder_path, 'Resources')
 
-        self.logger.info('Copying StoneValidators.{h,m} to output folder')
-        shutil.copy(os.path.join(rsrc_folder, 'StoneValidators.h'),
+        self.logger.info('Copying DbxStoneValidators.{h,m} to output folder')
+        shutil.copy(os.path.join(rsrc_folder, 'DbxStoneValidators.h'),
                     rsrc_output_folder)
-        shutil.copy(os.path.join(rsrc_folder, 'StoneValidators.m'),
+        shutil.copy(os.path.join(rsrc_folder, 'DbxStoneValidators.m'),
                     rsrc_output_folder)
-        self.logger.info('Copying StoneSerializers.{h,m} to output folder')
-        shutil.copy(os.path.join(rsrc_folder, 'StoneSerializers.h'),
+        self.logger.info('Copying DbxStoneSerializers.{h,m} to output folder')
+        shutil.copy(os.path.join(rsrc_folder, 'DbxStoneSerializers.h'),
                     rsrc_output_folder)
-        shutil.copy(os.path.join(rsrc_folder, 'StoneSerializers.m'),
+        shutil.copy(os.path.join(rsrc_folder, 'DbxStoneSerializers.m'),
                     rsrc_output_folder)
-        self.logger.info('Copying StoneBase.{h,m} to output folder')
-        shutil.copy(os.path.join(rsrc_folder, 'StoneBase.h'),
+        self.logger.info('Copying DbxStoneBase.{h,m} to output folder')
+        shutil.copy(os.path.join(rsrc_folder, 'DbxStoneBase.h'),
                     rsrc_output_folder)
-        shutil.copy(os.path.join(rsrc_folder, 'StoneBase.m'),
+        shutil.copy(os.path.join(rsrc_folder, 'DbxStoneBase.m'),
                     rsrc_output_folder)
 
         for namespace in api.namespaces.values():
@@ -108,7 +109,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         output_path = os.path.join('ApiObjects', ns_name)
 
         for data_type in namespace.linearize_data_types():
-            class_name = fmt_public_name(data_type.name)
+            class_name = fmt_class_prefix(data_type)
 
             if is_struct_type(data_type):
                 # struct implementation
@@ -135,9 +136,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
     def _generate_struct_class_m(self, struct):
         """Defines an Obj C implementation file that represents a struct in Stone."""
-        self._generate_imports_m(self._get_imports_m(struct, default_imports=['StoneSerializers', 'StoneValidators']))
+        self._generate_imports_m(self._get_imports_m(struct, default_imports=['DbxStoneSerializers', 'DbxStoneValidators']))
 
-        struct_name = fmt_class(struct.name)
+        struct_name = fmt_class_prefix(struct)
 
         with self.block_m(struct_name):
             self._generate_struct_cstor(struct)
@@ -158,9 +159,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self._generate_imports_h(self._get_imports_h(struct, []))
         self._generate_class_comment(struct)
 
-        struct_name = fmt_class(struct.name)
+        struct_name = fmt_class_prefix(struct)
 
-        with self.block_h_from_data_type(struct, protocol=['Serializable']):
+        with self.block_h_from_data_type(struct, protocol=['DbxSerializable']):
             self._generate_struct_properties(struct.fields)
             self._generate_struct_cstor_signature(struct)
             self._generate_struct_cstor_signature_default(struct)
@@ -175,14 +176,14 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
     def _generate_union_class_m(self, union):
         """Defines an Obj C implementation file that represents a union in Stone."""
-        self._generate_imports_m(self._get_imports_m(union, default_imports=['StoneSerializers', 'StoneValidators']))
+        self._generate_imports_m(self._get_imports_m(union, default_imports=['DbxStoneSerializers', 'DbxStoneValidators']))
 
-        union_name = fmt_class(union.name)
+        union_name = fmt_class_prefix(union)
 
-        with self.block_m(fmt_class(union.name)):
-            self._generate_union_cstor_funcs(union.all_fields, union_name)
-            self._generate_union_tag_state_funcs(union.all_fields, union_name)
-            self._generate_union_tag_vars_funcs(union.all_fields, union_name)
+        with self.block_m(fmt_class_prefix(union)):
+            self._generate_union_cstor_funcs(union.all_fields, union, union_name)
+            self._generate_union_tag_state_funcs(union.all_fields, union, union_name)
+            self._generate_union_tag_vars_funcs(union.all_fields, union, union_name)
             self._generate_serializable_funcs(union_name)
             self._generate_description_func(union_name)
 
@@ -199,15 +200,15 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self._generate_imports_h(self._get_imports_h(union, []))
         self._generate_class_comment(union)
 
-        union_name = fmt_class(union.name)
+        union_name = fmt_class_prefix(union)
 
-        with self.block_h_from_data_type(union, protocol=['Serializable']):
-            self._generate_union_tag_state(union.all_fields, union_name)
+        with self.block_h_from_data_type(union, protocol=['DbxSerializable']):
+            self._generate_union_tag_state(union.all_fields, union, union_name)
             self._generate_union_cstor_signatures(union.all_fields)
-            self._generate_union_tag_access_signatures(union.all_fields, union_name)
+            self._generate_union_tag_access_signatures(union.all_fields, union, union_name)
             self._generate_serializable_signatures()
             self._generate_description_signature()
-            self._generate_union_tag_property(union_name)
+            self._generate_union_tag_property(union, union_name)
             self._generate_union_properties(union.all_fields)
 
         self.emit()
@@ -277,12 +278,12 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self.emit(signature)
         self.emit()
 
-    def _generate_union_cstor_funcs(self, fields, union_name):
+    def _generate_union_cstor_funcs(self, fields, union, union_name):
         """Emits standard union constructor."""
-        enum_type = '{}Tag'.format(union_name)
+        enum_type = fmt_enum_name('tag', union)
 
         for field in fields:
-            enum_field_name = '{}_{}'.format(fmt_camel_upper(field.name), union_name)
+            enum_field_name = fmt_enum_name(field.name, union)
             func_args = [] if is_void_type(field.data_type) else fmt_func_args_from_fields([field])
 
             with self.block_func(self._cstor_name_from_field(field), func_args, 'instancetype'):
@@ -301,26 +302,26 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             self.emit(signature)
             self.emit()
 
-    def _generate_union_tag_state(self, fields, union_name):
+    def _generate_union_tag_state(self, fields, union, union_name):
         """Emits union tag enum type, which stores union state."""
-        with self.block('typedef NS_ENUM(NSInteger, {}Tag)'.format(union_name), after = ';'):
+        with self.block('typedef NS_ENUM(NSInteger, {})'.format(fmt_enum_name('tag', union)), after = ';'):
             for field in fields:
                 doc = self.process_doc(field.doc, self._docf) if field.doc else undocumented
                 self.emit_wrapped_text(doc, prefix=comment_prefix)
-                self.emit('{}_{},'.format(fmt_class(field.name), union_name))
+                self.emit('{},'.format(fmt_enum_name(field.name, union)))
         self.emit()
 
     def _generate_serializable_funcs(self, data_type_name):
         """Emits the two struct/union functions that implement the `Serializable` protocol."""
         with self.block_func('serialize', fmt_func_args_declaration([('obj', 'id')]),
                 'NSDictionary *', class_method=True):
-            self.emit('return [{}Serializer serialize:{}];'.format(fmt_class(data_type_name), fmt_func_args([('obj', 'obj')])))
+            self.emit('return [{}Serializer serialize:{}];'.format(data_type_name, fmt_func_args([('obj', 'obj')])))
 
         self.emit()
 
         with self.block_func('deserialize', fmt_func_args_declaration([('dict', 'NSDictionary *')]),
                 'id', class_method=True):
-            self.emit('return [{}Serializer deserialize:{}];'.format(fmt_class(data_type_name), fmt_func_args([('dict', 'dict')])))
+            self.emit('return [{}Serializer deserialize:{}];'.format(data_type_name, fmt_func_args([('dict', 'dict')])))
         self.emit()
 
     def _generate_serializable_signatures(self):
@@ -356,7 +357,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
     def _generate_description_func(self, data_type_name):
         with self.block_func('description', [], 'NSString *'):
-            self.emit('return [[{}Serializer serialize:{}] description];'.format(fmt_class(data_type_name), fmt_func_args([('valueObj', 'self')])))
+            self.emit('return [[{}Serializer serialize:{}] description];'.format(data_type_name, fmt_func_args([('valueObj', 'self')])))
 
         self.emit()
 
@@ -423,16 +424,18 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                 )
 
         if validator:
-            validator = '[StoneValidators {}]'.format(validator)
+            validator = '[DbxStoneValidators {}]'.format(validator)
 
             if nullable:
-                validator = "[StoneValidators nullableValidator:{}]".format(validator)
+                validator = "[DbxStoneValidators nullableValidator:{}]".format(validator)
         
         return validator
 
     def _generate_struct_serializer(self, struct):
         """Emits the serialize method for the serialization object for the given struct."""
-        with self.block_func('serialize', fmt_func_args_declaration([('valueObj', '{} *'.format(fmt_class(struct.name)))]), return_type='NSDictionary *', class_method=True):
+        struct_name = fmt_class_prefix(struct)
+
+        with self.block_func('serialize', fmt_func_args_declaration([('valueObj', '{} *'.format(struct_name))]), return_type='NSDictionary *', class_method=True):
             self.emit('NSMutableDictionary *jsonDict = [[NSMutableDictionary alloc] init];')
             self.emit()
 
@@ -455,9 +458,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     assert len(tags) == 1, tags
                     tag = tags[0]
 
-                    with self.block('if ([valueObj class] == [{} class])'.format(fmt_class(struct.name))):
-                        self.emit('NSDictionary *subTypeFields = [{}Serializer serialize:valueObj];'.format(fmt_class(struct.name)))
-                        with self.block('for (NSString* key in subTypeFields)'.format(fmt_class(struct.name))):
+                    with self.block('if ([valueObj class] == [{} class])'.format(struct_name)):
+                        self.emit('NSDictionary *subTypeFields = [{}Serializer serialize:valueObj];'.format(struct_name))
+                        with self.block('for (NSString* key in subTypeFields)'.format(struct_name)):
                             self.emit('jsonDict[key] = subTypeFields[key];')
                         self.emit('jsonDict[@".tag"] = @"{}";'.format(fmt_var(tag)))
 
@@ -469,7 +472,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
     def _generate_struct_deserializer(self, struct):
         """Emits the deserialize method for the serialization object for the given struct."""
-        with self.block_func('deserialize', fmt_func_args_declaration([('valueDict', 'NSDictionary *')]), return_type='{} *'.format(fmt_class(struct.name)), class_method=True):            
+        struct_name = fmt_class_prefix(struct)
+
+        with self.block_func('deserialize', fmt_func_args_declaration([('valueDict', 'NSDictionary *')]), return_type='{} *'.format(struct_name), class_method=True):            
             if not struct.has_enumerated_subtypes():
                 for field in struct.all_fields:
                     _, nullable = unwrap_nullable(field.data_type)
@@ -484,14 +489,14 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                 self.emit()
 
                 deserialized_obj_args = [(fmt_var(f.name), fmt_var(f.name)) for f in struct.all_fields]
-                self.emit('return [[{} alloc] {}:{}];'.format(fmt_class(struct.name), self._cstor_name_from_fields(struct.all_fields), fmt_func_args(deserialized_obj_args)))
+                self.emit('return [[{} alloc] {}:{}];'.format(struct_name, self._cstor_name_from_fields(struct.all_fields), fmt_func_args(deserialized_obj_args)))
             else:
                 for tags, subtype in struct.get_all_subtypes_with_tags():
                     assert len(tags) == 1, tags
                     tag = tags[0]
 
                     with self.block('if ([valueDict[@".tag"] isEqualToString:@"{}"])'.format(fmt_var(tag))):
-                        self.emit('return [{}Serializer deserialize:valueDict];'.format(fmt_class(subtype.name)))
+                        self.emit('return [{}Serializer deserialize:valueDict];'.format(fmt_class_prefix(subtype)))
 
                 self.emit()
                 self._generate_throw_error('InvalidTagEnum', 'Supplied tag enum has an invalid value.')
@@ -500,7 +505,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
     def _generate_union_serializer(self, union):
         """Emits the serialize method for the serialization object for the given union."""
-        with self.block_func('serialize', fmt_func_args_declaration([('valueObj', '{} *'.format(fmt_class(union.name)))]), return_type='NSDictionary *', class_method=True):
+        union_name = fmt_class_prefix(union)
+
+        with self.block_func('serialize', fmt_func_args_declaration([('valueObj', '{} *'.format(union_name))]), return_type='NSDictionary *', class_method=True):
             self.emit('NSMutableDictionary *jsonDict = [[NSMutableDictionary alloc] init];')
             self.emit()
 
@@ -529,7 +536,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
     def _generate_union_deserializer(self, union):
         """Emits the deserialize method for the serialization object for the given union."""
-        with self.block_func('deserialize', fmt_func_args_declaration([('valueDict', 'NSDictionary *')]), return_type='{} *'.format(fmt_class(union.name)), class_method=True):            
+        union_name = fmt_class_prefix(union)
+
+        with self.block_func('deserialize', fmt_func_args_declaration([('valueDict', 'NSDictionary *')]), return_type='{} *'.format(union_name), class_method=True):            
             self.emit('NSString *tag = valueDict[@".tag"];')
             self.emit()
 
@@ -548,7 +557,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     else:
                         deserialized_obj_args = []
 
-                    self.emit('return {};'.format(fmt_func_call(fmt_alloc_call(fmt_class(union.name)), self._cstor_name_from_field(field), fmt_func_args(deserialized_obj_args))))
+                    self.emit('return {};'.format(fmt_func_call(fmt_alloc_call(union_name), self._cstor_name_from_field(field), fmt_func_args(deserialized_obj_args))))
 
             self.emit()
 
@@ -560,20 +569,27 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         """Returns the appropriate serialization / deserialization method call for the given data type."""
         data_type, _ = unwrap_nullable(data_type)
         serializer_func = 'serialize' if serialize else 'deserialize'
-        serializer_args = [('value', input_value)]
+        serializer_args = []
 
         if is_list_type(data_type):
+            serializer_args.append(('value', input_value))
             array_block = '^id(id obj) {{ return {}; }}'.format(self._fmt_serialization_call(data_type.data_type, 'obj', serialize))
             serializer_args.append(('withBlock', array_block))
         elif is_timestamp_type(data_type):
-            serializer_args.append(('dateFormat', '@"{}"'.format(data_type.format)))
+            if serialize:
+                serializer_args.append(('value', input_value))
+                serializer_args.append(('dateFormat', '@"{}"'.format(data_type.format)))
+            else:
+                serializer_args.append(('value', '@"{}"'.format(data_type.format)))
+        else:
+            serializer_args.append(('value', input_value))
 
         return '[{} {}:{}]'.format(fmt_serial_obj(data_type), serializer_func, fmt_func_args(serializer_args))
 
     def _generate_route_objects_m(self, route_schema, namespace):
         """Emits implementation files for `Route` objects which encapsulate information
         regarding each route. These objects are passed as parameters when route calls are made."""
-        output_path = 'Routes/RouteObjects/{}RouteObjects.m'.format(fmt_camel_upper(namespace.name))
+        output_path = 'Routes/RouteObjects/Dbx{}RouteObjects.m'.format(fmt_camel_upper(namespace.name))
         namespace_name = fmt_camel_upper(namespace.name)
 
         with self.output_to_relative_path(output_path):
@@ -583,17 +599,17 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             self.emit()
 
             import_data_types = self._get_namespace_route_imports(namespace)
-            self._generate_imports_m(self._get_imports_m(import_data_types, default_imports=['{}Routes'.format(fmt_class(namespace.name)), 'StoneBase', '{}RouteObjects'.format(namespace_name)]))
+            self._generate_imports_m(self._get_imports_m(import_data_types, default_imports=['Dbx{}Routes'.format(fmt_class(namespace.name)), 'DbxStoneBase', 'Dbx{}RouteObjects'.format(namespace_name)]))
 
-            with self.block_m('{}RouteObjects'.format(namespace_name)):
+            with self.block_m('Dbx{}RouteObjects'.format(namespace_name)):
                 for route in namespace.routes:
-                    route_name = '{}{}'.format(fmt_camel(namespace.name), fmt_camel_upper(route.name))
-                    self.emit('static Route *{} = nil;'.format(route_name))
+                    route_name = 'dbx{}{}'.format(fmt_camel_upper(namespace.name), fmt_camel_upper(route.name))
+                    self.emit('static DbxRoute *{} = nil;'.format(route_name))
                 
                 self.emit()
 
                 for route in namespace.routes:
-                    route_name = '{}{}'.format(fmt_camel(namespace.name), fmt_camel_upper(route.name))
+                    route_name = 'dbx{}{}'.format(fmt_camel_upper(namespace.name), fmt_camel_upper(route.name))
  
                     if route.deprecated:
                         deprecated = '@{}'.format('YES')
@@ -610,9 +626,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     else:
                         error_type = 'nil'
 
-                    with self.block_func(route_name, return_type='Route *', class_method=True):
+                    with self.block_func(route_name, return_type='DbxRoute *', class_method=True):
                         with self.block('if (!{})'.format(route_name)):
-                            with self.block('{} = [[Route alloc] init:'.format(route_name), delim=(None, None), after='];'):
+                            with self.block('{} = [[DbxRoute alloc] init:'.format(route_name), delim=(None, None), after='];'):
                                 self.emit('@\"{}\"'.format(route.name))
                                 self.emit('namespace_:@\"{}\"'.format(namespace.name))
                                 self.emit('deprecated:{}'.format(deprecated))
@@ -637,38 +653,38 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         """Emits header files for `Route` objects which encapsulate information
         regarding each route. These objects are passed as parameters when route calls are made."""
         namespace_name = fmt_camel_upper(namespace.name)
-        with self.output_to_relative_path('Routes/RouteObjects/{}RouteObjects.h'.format(namespace_name)):
+        with self.output_to_relative_path('Routes/RouteObjects/Dbx{}RouteObjects.h'.format(namespace_name)):
             self.emit(comment_prefix)
             self.emit_wrapped_text('Stone Route Objects', prefix=comment_prefix)
             self.emit(comment_prefix)
             self.emit()
-            self.emit(fmt_import('StoneBase'))
+            self.emit(fmt_import('DbxStoneBase'))
             self.emit()
 
-            with self.block_h('{}RouteObjects'.format(namespace_name)):
+            with self.block_h('Dbx{}RouteObjects'.format(namespace_name)):
                 for route in namespace.routes:
-                    route_name = '{}{}'.format(fmt_camel(namespace.name), fmt_camel_upper(route.name))
-                    self.emit(fmt_signature(route_name, None, 'Route *', True))
+                    route_name = 'dbx{}{}'.format(fmt_camel_upper(namespace.name), fmt_camel_upper(route.name))
+                    self.emit(fmt_signature(route_name, None, 'DbxRoute *', True))
                     self.emit()
 
-    def _generate_union_tag_access_signatures(self, fields, union_name):
+    def _generate_union_tag_access_signatures(self, fields, union, union_name):
         """Emits the `is<TAG_NAME>` methods and `getTagName` method signatures for 
         determining tag state and retrieving human-readable value of tag state, respectively."""
         for field in fields:
             self.emit(fmt_signature('is{}'.format(fmt_camel_upper(field.name)), [], 'BOOL'))
             self.emit()
 
-        enum_type = '{}Tag'.format(union_name)
+        enum_type = fmt_enum_name('tag', union)
         self.emit(fmt_signature('getTagName', None, 'NSString * _Nonnull'))
         self.emit()
 
-    def _generate_union_tag_state_funcs(self, fields, union_name):
+    def _generate_union_tag_state_funcs(self, fields, union, union_name):
         """Emits the `is<TAG_NAME>` methods and `getTagName` method for determining
         tag state and retrieving human-readable value of tag state, respectively."""
-        enum_type = '{}Tag'.format(union_name)
+        enum_type = fmt_enum_name('tag', union)
 
         for field in fields:
-            enum_field_name = '{}_{}'.format(fmt_camel_upper(field.name), union_name)
+            enum_field_name = fmt_enum_name(field.name, union)
 
             with self.block_func('is{}'.format(fmt_camel_upper(field.name)), [], return_type='BOOL'):
                 self.emit('return _tag == ({}){};'.format(enum_type, enum_field_name))
@@ -676,7 +692,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
         with self.block_func('getTagName', return_type='NSString *'):
             for field in fields:
-                enum_field_name = '{}_{}'.format(fmt_camel_upper(field.name), union_name)
+                enum_field_name = fmt_enum_name(field.name, union)
                 enum_full_value = '({}){}'.format(enum_type, enum_field_name)
 
                 with self.block('if (_tag == {})'.format(enum_full_value)):
@@ -687,15 +703,15 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
         self.emit()
 
-    def _generate_union_tag_vars_funcs(self, fields, union_name):
+    def _generate_union_tag_vars_funcs(self, fields, union, union_name):
         """Emits the getter methods for retrieving tag-specific state. Setters throw
         an error in the event an associated tag state variable is accessed without
         the correct tag state."""
-        enum_type = '{}Tag'.format(union_name)
+        enum_type = fmt_enum_name('tag', union)
 
         for field in fields:
             if not is_void_type(field.data_type):
-                enum_field_name = '{}_{}'.format(fmt_camel_upper(field.name), union_name)
+                enum_field_name = fmt_enum_name(field.name, union)
                 enum_full_value = '({}){}'.format(enum_type, enum_field_name)
                 with self.block_func('{}'.format(fmt_camel(field.name)), [], return_type=fmt_type(field.data_type)):
                     with self.block('if (_tag != {})'.format(enum_full_value), delim=('{','}')):
@@ -725,11 +741,11 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         if fields:
             self.emit()
 
-    def _generate_union_tag_property(self, union_name):
+    def _generate_union_tag_property(self, union, union_name):
         """Emits union instance property representing union state."""
         self.emit_wrapped_text('Current state of the {} union type.'.format(union_name),
             prefix=comment_prefix)
-        self.emit(fmt_property_str('tag', '{}Tag'.format(union_name)))
+        self.emit(fmt_property_str('tag', '{}'.format(fmt_enum_name('tag', union))))
 
     def _generate_class_comment(self, data_type):
         """Emits a generic class comment for a union or struct."""
@@ -741,8 +757,8 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             raise TypeError('Can\'t handle type %r' % type(data_type))
 
         self.emit(comment_prefix)
-        self.emit_wrapped_text('The {} {}.'.format(fmt_class(
-            data_type.name), class_type),prefix=comment_prefix)
+        self.emit_wrapped_text('The {} {}.'.format(fmt_class_prefix(
+            data_type), class_type),prefix=comment_prefix)
         if data_type.doc:
             self.emit(comment_prefix)
             self.emit_wrapped_text(self.process_doc(

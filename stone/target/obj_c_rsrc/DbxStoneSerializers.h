@@ -7,7 +7,7 @@
 ///
 /// Validator functions used by SDK to impose value constraints.
 ///
-@protocol Serializable <NSObject>
+@protocol DbxSerializable <NSObject>
 
 + (NSDictionary * _Nonnull)serialize:(id _Nonnull)obj;
 
@@ -16,7 +16,7 @@
 @end
 
 
-@interface NSArray (Serializable) <Serializable>
+@interface NSArray (DbxSerializable) <DbxSerializable>
 
 + (NSDictionary * _Nonnull)serialize:(id _Nonnull)obj;
 
@@ -25,7 +25,7 @@
 @end
 
 
-@interface StringSerializer : NSObject
+@interface DbxStringSerializer : NSObject
 
 + (NSString * _Nonnull)serialize:(NSString * _Nonnull)value;
 
@@ -34,7 +34,7 @@
 @end
 
 
-@interface NSNumberSerializer : NSObject
+@interface DbxNSNumberSerializer : NSObject
 
 + (NSNumber * _Nonnull)serialize:(NSNumber * _Nonnull)value;
 
@@ -43,7 +43,7 @@
 @end
 
 
-@interface BoolSerializer : NSObject
+@interface DbxBoolSerializer : NSObject
 
 + (NSNumber * _Nonnull)serialize:(NSNumber * _Nonnull)value;
 
@@ -52,16 +52,16 @@
 @end
 
 
-@interface NSDateSerializer : NSObject
+@interface DbxNSDateSerializer : NSObject
 
 + (NSString * _Nonnull)serialize:(NSDate * _Nonnull)value dateFormat:(NSString * _Nonnull)dateFormat;
 
-+ (NSDate * _Nonnull)deserialize:(NSString * _Nonnull)value dateFormat:(NSString * _Nonnull)dateFormat;
++ (NSDate * _Nonnull)deserialize:(NSString * _Nonnull)value;
 
 @end
 
 
-@interface ArraySerializer : NSObject
+@interface DbxArraySerializer : NSObject
 
 + (NSArray * _Nonnull)serialize:(NSArray * _Nonnull)value withBlock:(id _Nonnull(^_Nonnull)(id _Nonnull obj))withBlock;
 

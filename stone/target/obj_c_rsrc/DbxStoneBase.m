@@ -2,11 +2,11 @@
 /// The objects in this file are used by generated code and should not need to be invoked manually.
 ///
 
-#import "StoneBase.h"
+#import "DbxStoneBase.h"
 
-@implementation Route
+@implementation DbxRoute
 
-- (nonnull instancetype)init:(NSString *)name namespace_:(NSString *)namespace_ deprecated:(NSNumber *)deprecated resultType:(Class<Serializable>)resultType errorType:(Class<Serializable>)errorType attrs:(NSDictionary<NSString *, NSString *> *)attrs {
+- (nonnull instancetype)init:(NSString *)name namespace_:(NSString *)namespace_ deprecated:(NSNumber *)deprecated resultType:(Class<DbxSerializable>)resultType errorType:(Class<DbxSerializable>)errorType attrs:(NSDictionary<NSString *, NSString *> *)attrs {
     self = [self init];
     if (self != nil) {
         _name = name;

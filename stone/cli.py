@@ -23,6 +23,7 @@ from .lang.tower import TowerOfStone
 _builtin_generators = (
     'obj_c_client',
     'obj_c_types',
+    'obj_c_tests',
     'js_client',
     'python_types',
     'python_client',

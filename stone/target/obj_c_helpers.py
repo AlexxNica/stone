@@ -17,12 +17,14 @@ from stone.data_type import (
     Void,
     is_alias,
     is_boolean_type,
+    is_float_type,
     is_list_type,
     is_numeric_type,
     is_string_type,
     is_struct_type,
     is_timestamp_type,
     is_tag_ref,
+    is_union_type,
     is_user_defined_type,
     is_void_type,
     unwrap_nullable,
@@ -50,17 +52,17 @@ _primitive_table = {
 
 
 _serial_table = {
-    Boolean: 'BoolSerializer',
-    Bytes: 'NSDataSerializer',
-    Float32: 'NSNumberSerializer',
-    Float64: 'NSNumberSerializer',
-    Int32: 'NSNumberSerializer',
-    Int64: 'NSNumberSerializer',
-    List: 'ArraySerializer',
-    String: 'StringSerializer',
-    Timestamp: 'NSDateSerializer',
-    UInt32: 'NSNumberSerializer',
-    UInt64: 'NSNumberSerializer',
+    Boolean: 'DbxBoolSerializer',
+    Bytes: 'DbxNSDataSerializer',
+    Float32: 'DbxNSNumberSerializer',
+    Float64: 'DbxNSNumberSerializer',
+    Int32: 'DbxNSNumberSerializer',
+    Int64: 'DbxNSNumberSerializer',
+    List: 'DbxArraySerializer',
+    String: 'DbxStringSerializer',
+    Timestamp: 'DbxNSDateSerializer',
+    UInt32: 'DbxNSNumberSerializer',
+    UInt64: 'DbxNSNumberSerializer',
 }
 
 
@@ -154,24 +156,29 @@ def fmt_obj(o):
     return pprint.pformat(o, width=1)
 
 
-def fmt_camel(name, upper_first=False):
+def fmt_camel(name, upper_first=False, reserved=True, prefixes=False):
     name = str(name)
     words = [word.capitalize() for word in split_words(name)]
     if not upper_first:
         words[0] = words[0].lower()
     ret = ''.join(words)
-    if ret.lower() in _reserved_words:
-        ret += '_'
-    # properties can't begin with certain keywords
-    for reserved_prefix in _reserved_prefixes:
-        if ret.lower().startswith(reserved_prefix):
-            new_prefix = 'the' if not upper_first else 'The'
-            ret = new_prefix + ret[0].upper() + ret[1:]
-            continue
+
+    if reserved:
+        if ret.lower() in _reserved_words:
+            ret += '_'
+        # properties can't begin with certain keywords
+        for reserved_prefix in _reserved_prefixes:
+            if ret.lower().startswith(reserved_prefix):
+                new_prefix = 'the' if not upper_first else 'The'
+                ret = new_prefix + ret[0].upper() + ret[1:]
+                continue
     return ret
 
-def fmt_camel_upper(name):
-    return fmt_camel(name, upper_first=True)
+def fmt_enum_name(field_name, union):
+    return '{}{}{}'.format(fmt_camel_upper(union.namespace.name), fmt_camel_upper(union.name), fmt_camel_upper(field_name))
+
+def fmt_camel_upper(name, reserved=True):
+    return fmt_camel(name, upper_first=True, reserved=reserved)
 
 def fmt_public_name(name):
     return fmt_camel_upper(name)
@@ -185,7 +192,7 @@ def fmt_class_type(data_type):
     data_type, nullable = unwrap_nullable(data_type)
 
     if is_user_defined_type(data_type):
-        result = '{}'.format(fmt_class(data_type.name))
+        result = '{}'.format(fmt_class_prefix(data_type))
     else:
         result = _primitive_table.get(data_type.__class__, fmt_class(data_type.name))
         
@@ -204,7 +211,7 @@ def fmt_type(data_type, tag=False, has_default=False):
     data_type, nullable = unwrap_nullable(data_type)
 
     if is_user_defined_type(data_type):
-        result = '{} *'.format(fmt_class(data_type.name))
+        result = 'Dbx{}{} *'.format(fmt_class(data_type.namespace.name), fmt_class(data_type.name))
     else:
         result = _primitive_table.get(data_type.__class__, fmt_class(data_type.name))
         
@@ -227,6 +234,96 @@ def fmt_type(data_type, tag=False, has_default=False):
     return result
 
 
+def fmt_class_prefix(data_type):
+    return 'Dbx{}{}'.format(fmt_class(data_type.namespace.name), fmt_class(data_type.name))
+
+
+def fmt_literal(example_value, data_type):    
+    data_type, nullable = unwrap_nullable(data_type)
+
+    result = example_value
+
+    if is_user_defined_type(data_type):
+        obj_args = []
+
+        if is_union_type(data_type):
+            example_tag = example_value['.tag']
+
+
+
+            for field in data_type.all_fields:
+                if field.name == example_tag:
+                    if not is_void_type(field.data_type):
+                        if field.name in example_value:
+                            obj_args.append((fmt_var(field.name), fmt_literal(example_value[field.name], field.data_type)))
+                        else:
+                            obj_args.append((fmt_var(field.name), fmt_literal(example_value, field.data_type)))
+
+            result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)),
+                'initWith{}'.format(fmt_camel_upper(example_value['.tag'])), fmt_func_args(obj_args))
+        else:
+
+            for field in data_type.all_fields:
+
+                
+
+                if field.name in example_value:
+                    obj_args.append((fmt_var(field.name), fmt_literal(example_value[field.name], field.data_type)))
+                else:
+                    if not is_void_type(field.data_type):
+                        obj_args.append((fmt_var(field.name), fmt_default(field.data_type)))
+
+            result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)),
+                'initWith{}'.format(fmt_camel_upper(data_type.all_fields[0].name)), fmt_func_args(obj_args))
+    elif is_list_type(data_type):
+        if example_value:
+            result = '@[{}]'.format(fmt_literal(example_value[0], data_type.data_type))
+        else:
+            result = 'nil'
+    elif is_numeric_type(data_type):
+        if is_float_type(data_type):
+            result = '[NSNumber numberWithDouble:{}]'.format(example_value)
+        elif isinstance(data_type, (UInt64, Int64)):
+            result = '[NSNumber numberWithLong:{}]'.format(example_value)
+        else:
+            result = '[NSNumber numberWithInt:{}]'.format(example_value)
+    elif is_timestamp_type(data_type):
+        result = '[NSDateSerializer deserialize:@"{}"]'.format(example_value)
+    elif is_string_type(data_type):
+        result = '@"{}"'.format(result)
+    elif is_boolean_type(data_type):
+        result = '@YES' if bool(example_value) else '@NO'
+
+    return str(result)
+
+
+def fmt_default(data_type):
+    data_type, nullable = unwrap_nullable(data_type)
+
+    result = 'DEFAULT'
+
+    if nullable:
+        return 'nil'
+
+    if is_user_defined_type(data_type):
+        result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)), 'init', [])
+    elif is_list_type(data_type):
+        result = fmt_func_call(fmt_alloc_call('NSArray'), 'init', [])
+    elif is_numeric_type(data_type):
+        if is_float_type(data_type):
+            result = '[NSNumber numberWithDouble:5]'
+        else:
+            result = '[NSNumber numberWithInt:5]'
+    elif is_timestamp_type(data_type):
+        result = '[[NSDateFormatter new] setDateFormat:[self convertFormat:@"test"]]'
+    elif is_string_type(data_type):
+        result = '@"teststring"'
+    elif is_boolean_type(data_type):
+        result = '@YES'
+
+    return result
+
+
 def fmt_validator(data_type):
     return _validator_table.get(data_type.__class__, fmt_class(data_type.name))
 
@@ -235,7 +332,7 @@ def fmt_serial_obj(data_type):
     data_type, nullable = unwrap_nullable(data_type)
 
     if is_user_defined_type(data_type):
-        result = '{}Serializer'.format(fmt_class(data_type.name))
+        result = 'Dbx{}{}Serializer'.format(fmt_camel_upper(data_type.namespace.name), fmt_class(data_type.name))
     else:
         result = _serial_table.get(data_type.__class__, fmt_class(data_type.name))
 
@@ -290,35 +387,10 @@ def fmt_alloc_call(class_name):
     return '[{} alloc]'.format(class_name)
 
 
-def fmt_struct_init_args(data_type, namespace=None):
-    args = []
-    for field in data_type.all_fields:
-        name = fmt_var(field.name)
-        value = fmt_type(field.data_type, tag=True)
-        field_type = field.data_type
-        if is_nullable_type(field_type):
-            field_type = field_type.data_type
-            nullable = True
-        else:
-            nullable = False
-
-        if field.has_default:
-            if is_union_type(field_type):
-                default = '.{}'.format(fmt_class(field.default.tag_name))
-            else:
-                default = fmt_obj(field.default)
-            value += ' = {}'.format(default)
-        elif nullable:
-            value += ' = nil'
-        arg = (name, value)
-        args.append(arg)
-    return args
-
-
 def fmt_default_value(field):
     if is_tag_ref(field.default):
         return '[[{} alloc] initWith{}]'.format(
-            fmt_class(field.default.union_data_type.name),
+            fmt_class_prefix(field.default.union_data_type),
             fmt_class(field.default.tag_name))
     elif is_numeric_type(field.data_type):
         return '[NSNumber numberWithInt:{}]'.format(field.default)

@@ -38,6 +38,7 @@ from stone.generator import CodeGenerator
 from stone.target.obj_c_helpers import (
     fmt_camel_upper,
     fmt_class,
+    fmt_class_prefix,
     fmt_func,
     fmt_import,
     fmt_obj,
@@ -71,7 +72,7 @@ class ObjCBaseGenerator(CodeGenerator):
     """Wrapper class over Stone generator for Obj C logic."""
 
     @contextmanager
-    def block_m(self, class_name, protocol=None):
+    def block_m(self, class_name):
         with self.block('@implementation {}'.format(class_name), delim=('','@end'), dent=0):
             self.emit()
             yield
@@ -84,7 +85,7 @@ class ObjCBaseGenerator(CodeGenerator):
         if not protocol:
             extensions = []
             if data_type.parent_type and is_struct_type(data_type):
-                extensions.append(fmt_class(data_type.parent_type.name))
+                extensions.append(fmt_class_prefix(data_type.parent_type))
             else:
                 if is_union_type(data_type):
                     # Use a handwritten base class
@@ -94,20 +95,21 @@ class ObjCBaseGenerator(CodeGenerator):
 
             extend_suffix = ' : {}'.format(', '.join(extensions)) if extensions else ''
         else:
-            base = data_type.parent_type.name if (data_type.parent_type and not is_union_type(data_type)) else 'NSObject'
+            base = fmt_class_prefix(data_type.parent_type) if (data_type.parent_type and not is_union_type(data_type)) else 'NSObject'
             extend_suffix = ' : {} <{}>'.format(base, ', '.join(protocol))
-        with self.block('@interface {}{}'.format(fmt_class(data_type.name), extend_suffix), delim=('','@end'), dent=0):
+        with self.block('@interface {}{}'.format(fmt_class_prefix(data_type), extend_suffix), delim=('','@end'), dent=0):
             self.emit()
             yield
 
     @contextmanager
-    def block_h(self, class_name, protocol=None):
-        extensions = ['NSObject']
+    def block_h(self, class_name, protocol=None, extensions=None):
+        if not extensions:
+            extensions = ['NSObject']
 
         if not protocol:
-            extend_suffix = ' : {}'.format(', '.join(extensions)) if extensions else ''
+            extend_suffix = ' : {}'.format(', '.join(extensions))
         else:
-            extend_suffix = ' : NSObject <{}>'.format(protocol)
+            extend_suffix = ' : {} <{}>'.format(', '.join(extensions), protocol)
 
         with self.block('@interface {}{}'.format(class_name, extend_suffix), delim=('','@end'), dent=0):
             self.emit()
@@ -135,14 +137,14 @@ class ObjCBaseGenerator(CodeGenerator):
         import_classes = default_imports
 
         for data_type in data_types:
-            import_classes.append(fmt_class(data_type.name))
+            import_classes.append(fmt_class_prefix(data_type))
 
             if data_type.parent_type:
-                import_classes.append(fmt_class(data_type.parent_type.name))
+                import_classes.append(fmt_class_prefix(data_type.parent_type))
 
             if is_struct_type(data_type) and data_type.has_enumerated_subtypes():
                 for tags, subtype in data_type.get_all_subtypes_with_tags():
-                    import_classes.append(fmt_class(subtype.name))
+                    import_classes.append(fmt_class_prefix(subtype))
 
             for field in data_type.all_fields:
                 data_type, _ = unwrap_nullable(field.data_type)
@@ -152,7 +154,7 @@ class ObjCBaseGenerator(CodeGenerator):
                     data_type = data_type.data_type
 
                 if is_user_defined_type(data_type):
-                    import_classes.append(fmt_class(data_type.name))
+                    import_classes.append(fmt_class_prefix(data_type))
 
         
         if import_classes:
@@ -169,7 +171,7 @@ class ObjCBaseGenerator(CodeGenerator):
         import_classes = default_imports
 
         for data_type in data_types:
-            import_classes.append(fmt_class(data_type.name))
+            import_classes.append(fmt_class_prefix(data_type))
 
             for field in data_type.all_fields:
                 data_type, _ = unwrap_nullable(field.data_type)
@@ -179,7 +181,7 @@ class ObjCBaseGenerator(CodeGenerator):
                     data_type = data_type.data_type
 
                 if is_user_defined_type(data_type):
-                    import_classes.append(fmt_class(data_type.name))
+                    import_classes.append(fmt_class_prefix(data_type))
 
         import_classes = list(set(import_classes))
         import_classes.sort()
@@ -207,10 +209,10 @@ class ObjCBaseGenerator(CodeGenerator):
 
     def _generate_init_imports_h(self, data_type):
         self.emit('#import <Foundation/Foundation.h>')
-        self.emit('#import "StoneSerializers.h"')
+        self.emit('#import "DbxStoneSerializers.h"')
 
         if data_type.parent_type:
-            self.emit(fmt_import(fmt_class(data_type.parent_type.name)))
+            self.emit(fmt_import(fmt_class_prefix(data_type.parent_type)))
 
         self.emit()
 

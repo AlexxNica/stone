@@ -2,9 +2,9 @@
 /// The objects in this file are used by generated code and should not need to be invoked manually.
 ///
 
-#import "StoneSerializers.h"
+#import "DbxStoneSerializers.h"
 
-@implementation NSArray (Serializable)
+@implementation NSArray (DbxSerializable)
 
 + (NSDictionary * _Nonnull)serialize:(id _Nonnull)obj {
     return obj;
@@ -17,7 +17,7 @@
 @end
 
 
-@implementation StringSerializer
+@implementation DbxStringSerializer
 
 + (NSString *)serialize:(NSString *)value {
     return value;
@@ -30,7 +30,7 @@
 @end
 
 
-@implementation NSNumberSerializer
+@implementation DbxNSNumberSerializer
 
 + (NSNumber *)serialize:(NSNumber *)value {
     return value;
@@ -43,7 +43,7 @@
 @end
 
 
-@implementation BoolSerializer
+@implementation DbxBoolSerializer
 
 + (NSNumber *)serialize:(NSNumber *)value {
     return value;
@@ -56,7 +56,7 @@
 @end
 
 
-@implementation NSDateSerializer
+@implementation DbxNSDateSerializer
 
 + (NSString *)serialize:(NSDate *)value dateFormat:(NSString *)dateFormat {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
@@ -66,10 +66,10 @@
     return [formatter stringFromDate:value];
 }
 
-+ (NSDate *)deserialize:(NSString *)value dateFormat:(NSString *)dateFormat {
++ (NSDate *)deserialize:(NSString *)value {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
-    [formatter setDateFormat:[self convertFormat:dateFormat]];
+    [formatter setDateFormat:[self convertFormat:value]];
     
     return [formatter dateFromString:value];
 }
@@ -179,7 +179,7 @@
 @end
 
 
-@implementation ArraySerializer
+@implementation DbxArraySerializer
 
 + (NSArray *)serialize:(NSArray *)value withBlock:(id (^)(id obj))withBlock {
     NSMutableArray *resultArray = [[NSMutableArray alloc] init];
