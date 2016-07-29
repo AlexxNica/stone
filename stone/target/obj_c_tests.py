@@ -58,19 +58,19 @@ class ObjCTestGenerator(ObjCBaseGenerator):
     cmdline_parser = _cmdline_parser
 
     def generate(self, api):
-        with self.output_to_relative_path('SerializationTests.m'):
+        with self.output_to_relative_path('DbxSerializationTests.m'):
             self.emit_raw(base)
             self.emit('#import <XCTest/XCTest.h>')
             self.emit()
             self._generate_testing_imports(api)
 
-            with self.block_h('SerializationTests', extensions=['XCTestCase']):
+            with self.block_h('DbxSerializationTests', extensions=['XCTestCase']):
                 pass
 
             self.emit()
             self.emit()
 
-            with self.block_m('SerializationTests'):
+            with self.block_m('DbxSerializationTests'):
                 for namespace in api.namespaces.values():
                     self._generate_namespace_tests(namespace)
 
@@ -88,7 +88,8 @@ class ObjCTestGenerator(ObjCBaseGenerator):
                 examples = data_type.get_examples()
 
                 for example_type in examples:
-                    with self.block_func('serialize{}{}{}'.format(ns_name, class_name, fmt_camel_upper(example_type, reserved=False))):                  
+                    test_name = 'testSerialize{}{}{}'.format(ns_name, class_name, fmt_camel_upper(example_type, reserved=False))
+                    with self.block_func(test_name):
                         self.emit('/// Data from the "{}" example'.format(example_type))
                         example_data = examples[example_type].value
 
@@ -105,7 +106,7 @@ class ObjCTestGenerator(ObjCBaseGenerator):
                             #     print()
 
                             field_name = fmt_var(field.name)
-
+                            
                             if field.name in example_data:
                                 example_value = fmt_literal(example_data[field.name], field_data_type)
                                 example_value = example_value.replace('\n', '')
@@ -116,8 +117,16 @@ class ObjCTestGenerator(ObjCBaseGenerator):
                                     result.append((field_name, example_value))
 
                                 if is_user_defined_type(field_data_type):
-                                    self.emit('{} *{} = {};'.format(fmt_class_prefix(field_data_type),
-                                        field_name, example_value))
+                                    if is_struct_type(field_data_type) and field_data_type.has_enumerated_subtypes():
+                                        for tags, subtype in field_data_type.get_all_subtypes_with_tags():
+                                            assert len(tags) == 1, tags
+                                            tag = tags[0]
+                                            if tag == example_data[field.name]['.tag']:
+                                                self.emit('{} *{} = {};'.format(fmt_class_prefix(subtype),
+                                                    field_name, fmt_literal(example_data[field.name], subtype)))
+                                    else:   
+                                        self.emit('{} *{} = {};'.format(fmt_class_prefix(field_data_type),
+                                            field_name, example_value))
                                 elif is_list_type(field_data_type):
                                     self.emit('NSArray *{} = {};'.format(field_name, example_value))
                                 elif is_timestamp_type(field_data_type):
@@ -131,10 +140,25 @@ class ObjCTestGenerator(ObjCBaseGenerator):
 
 
                         if '\n' not in args_str:
-                            self.emit('{} *obj = {};'.format(fmt_class_prefix(data_type), fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)), self._cstor_name_from_fields_names(result), args_str)))
-                            self.emit('NSData *serialized = [DropboxTransportClient jsonDataWithDictionary:[{} serialize:obj]];'.format(fmt_class_prefix(data_type)))
-                            # self.emit('{} *serialized = [DropboxTransportClient jsonDataWithDictionary:[obj serialize]];'.format(fmt_class_prefix(data_type)))
+                            if fmt_class_prefix(data_type) == 'DbxFilesMetadata':
+                                print(data_type)
+                            if is_struct_type(data_type) and data_type.has_enumerated_subtypes():
+                                for tags, subtype in data_type.get_all_subtypes_with_tags():
+                                    assert len(tags) == 1, tags
+                                    tag = tags[0]
+                                    if tag == example_data['.tag']:
+                                        self.emit('{} *obj = {};'.format(fmt_class_prefix(subtype), fmt_literal(example_data, subtype)))
+                                        self.emit('NSData *serializedData = [DropboxTransportClient jsonDataWithDictionary:[{} serialize:obj]];'.format(fmt_class_prefix(subtype)))
+                                        self.emit('id jsonObj = [NSJSONSerialization JSONObjectWithData:serializedData options:NSJSONReadingMutableContainers error:nil];')
+                                        self.emit('{} *deserializedObj = [{} deserialize:jsonObj];'.format(fmt_class_prefix(subtype), fmt_class_prefix(subtype)))
+                                        self.emit('NSAssert(([[obj description] isEqual:[deserializedObj description]]), @"\\nSerialization and deserialization failed to preserve object data:\\n\\nBefore:\\n %@ \\n\\nAfter:\\n %@.\\n\\n", obj, deserializedObj);')
 
+                            else:   
+                                self.emit('{} *obj = {};'.format(fmt_class_prefix(data_type), fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)), self._cstor_name_from_fields_names(result), args_str)))
+                                self.emit('NSData *serializedData = [DropboxTransportClient jsonDataWithDictionary:[{} serialize:obj]];'.format(fmt_class_prefix(data_type)))
+                                self.emit('id jsonObj = [NSJSONSerialization JSONObjectWithData:serializedData options:NSJSONReadingMutableContainers error:nil];')
+                                self.emit('{} *deserializedObj = [{} deserialize:jsonObj];'.format(fmt_class_prefix(data_type), fmt_class_prefix(data_type)))
+                                self.emit('NSAssert(([[obj description] isEqual:[deserializedObj description]]), @"\\nSerialization and deserialization failed to preserve object data:\\n\\nBefore:\\n %@ \\n\\nAfter:\\n %@.\\n\\n", obj, deserializedObj);')
                     self.emit()
     
     def _field_type_from_field_name(self, field_name, data_type):

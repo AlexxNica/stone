@@ -458,9 +458,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     assert len(tags) == 1, tags
                     tag = tags[0]
 
-                    with self.block('if ([valueObj class] == [{} class])'.format(struct_name)):
-                        self.emit('NSDictionary *subTypeFields = [{}Serializer serialize:valueObj];'.format(struct_name))
-                        with self.block('for (NSString* key in subTypeFields)'.format(struct_name)):
+                    with self.block('if ([valueObj isKindOfClass:[{} class]])'.format(fmt_class_prefix(subtype))):
+                        self.emit('NSDictionary *subTypeFields = [{}Serializer serialize:valueObj];'.format(fmt_class_prefix(subtype)))
+                        with self.block('for (NSString* key in subTypeFields)'):
                             self.emit('jsonDict[key] = subTypeFields[key];')
                         self.emit('jsonDict[@".tag"] = @"{}";'.format(fmt_var(tag)))
 
@@ -511,8 +511,12 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             self.emit('NSMutableDictionary *jsonDict = [[NSMutableDictionary alloc] init];')
             self.emit()
 
+            first_block = True
             for field in union.all_fields:
-                with self.block('if ([valueObj is{}])'.format(fmt_camel_upper(field.name))):                    
+                if first_block:
+                    first_block = False
+
+                with self.block('{} ([valueObj is{}])'.format(if first_block else 'else if', fmt_camel_upper(field.name))):                    
                     data_type, nullable = unwrap_nullable(field.data_type)
                     input_value = 'valueObj.{}'.format(fmt_var(field.name))
                     serialize_call = self._fmt_serialization_call(field.data_type, input_value, True)
@@ -526,9 +530,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
                     self.emit('jsonDict[@".tag"] = @"{}";'.format(field.name))
 
-            self.emit()
+            with self.block('else'):                    
+                self._generate_throw_error('InvalidTagEnum', 'Supplied tag enum has an invalid value.')
 
-            self._generate_throw_error('InvalidTagEnum', 'Supplied tag enum has an invalid value.')
             self.emit()
             self.emit('return jsonDict;')
 
@@ -576,11 +580,8 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             array_block = '^id(id obj) {{ return {}; }}'.format(self._fmt_serialization_call(data_type.data_type, 'obj', serialize))
             serializer_args.append(('withBlock', array_block))
         elif is_timestamp_type(data_type):
-            if serialize:
-                serializer_args.append(('value', input_value))
-                serializer_args.append(('dateFormat', '@"{}"'.format(data_type.format)))
-            else:
-                serializer_args.append(('value', '@"{}"'.format(data_type.format)))
+            serializer_args.append(('value', input_value))
+            serializer_args.append(('dateFormat', '@"{}"'.format(data_type.format)))
         else:
             serializer_args.append(('value', input_value))
 

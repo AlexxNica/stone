@@ -262,19 +262,21 @@ def fmt_literal(example_value, data_type):
             result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)),
                 'initWith{}'.format(fmt_camel_upper(example_value['.tag'])), fmt_func_args(obj_args))
         else:
-
-            for field in data_type.all_fields:
-
-                
-
-                if field.name in example_value:
-                    obj_args.append((fmt_var(field.name), fmt_literal(example_value[field.name], field.data_type)))
-                else:
-                    if not is_void_type(field.data_type):
-                        obj_args.append((fmt_var(field.name), fmt_default(field.data_type)))
-
-            result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)),
-                'initWith{}'.format(fmt_camel_upper(data_type.all_fields[0].name)), fmt_func_args(obj_args))
+            if data_type.has_enumerated_subtypes():
+                for tags, subtype in data_type.get_all_subtypes_with_tags():
+                    assert len(tags) == 1, tags
+                    tag = tags[0]
+                    if tag == example_value['.tag']:
+                        result = fmt_literal(example_value, subtype)
+            else:
+                for field in data_type.all_fields:
+                    if field.name in example_value:
+                        obj_args.append((fmt_var(field.name), fmt_literal(example_value[field.name], field.data_type)))
+                    else:
+                        if not is_void_type(field.data_type):
+                            obj_args.append((fmt_var(field.name), fmt_default(field.data_type)))
+                result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)),
+                    'initWith{}'.format(fmt_camel_upper(data_type.all_fields[0].name)), fmt_func_args(obj_args))
     elif is_list_type(data_type):
         if example_value:
             result = '@[{}]'.format(fmt_literal(example_value[0], data_type.data_type))
@@ -288,7 +290,7 @@ def fmt_literal(example_value, data_type):
         else:
             result = '[NSNumber numberWithInt:{}]'.format(example_value)
     elif is_timestamp_type(data_type):
-        result = '[NSDateSerializer deserialize:@"{}"]'.format(example_value)
+        result = '[DbxNSDateSerializer deserialize:@"{}" dateFormat:@"{}"]'.format(example_value, data_type.format)
     elif is_string_type(data_type):
         result = '@"{}"'.format(result)
     elif is_boolean_type(data_type):

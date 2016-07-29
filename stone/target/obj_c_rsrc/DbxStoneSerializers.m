@@ -66,10 +66,10 @@
     return [formatter stringFromDate:value];
 }
 
-+ (NSDate *)deserialize:(NSString *)value {
++ (NSDate *)deserialize:(NSString *)value dateFormat:(NSString *)dateFormat {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
-    [formatter setDateFormat:[self convertFormat:value]];
+    [formatter setDateFormat:[self convertFormat:dateFormat]];
     
     return [formatter dateFromString:value];
 }
