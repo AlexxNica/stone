@@ -127,7 +127,7 @@ class ObjCGenerator(ObjCBaseGenerator):
                 with self.block_init():
                     for namespace in api.namespaces.values():
                         if namespace.routes:
-                            self.emit('_{} = [[Dbx{}Routes alloc] init: client];'.format(fmt_var(namespace.name), fmt_camel_upper(namespace.name)))
+                            self.emit('_{}Routes = [[Dbx{}Routes alloc] init: client];'.format(fmt_var(namespace.name), fmt_camel_upper(namespace.name)))
 
     def _generate_client_h(self, api):
         """Generates client base header file. For each namespace, the client will
@@ -141,13 +141,15 @@ class ObjCGenerator(ObjCBaseGenerator):
         self._generate_imports_h(import_classes)
 
         with self.block_h('{}'.format(self.args.class_name)):
-            self.emit(fmt_signature('init', fmt_func_args_declaration([('client', '{} * _Nonnull'.format(self.args.transport_client_name))]), 'nonnull instancetype'))
+            self.emit('{};'.format(fmt_signature('init', fmt_func_args_declaration([('client', '{} * _Nonnull'.format(self.args.transport_client_name))]), 'nonnull instancetype')))
             self.emit()
 
             for namespace in api.namespaces.values():
                 if namespace.routes:
                     self.emit_wrapped_text('Routes within the {} namespace. See Dbx{}Routes for details.'.format(fmt_var(namespace.name), fmt_camel_upper(namespace.name)), prefix=comment_prefix)
-                    self.emit(fmt_property_str(fmt_var(namespace.name), 'Dbx{}Routes * _Nonnull'.format(fmt_camel_upper(namespace.name))))
+                    self.emit(fmt_property_str('{}Routes'.format(fmt_var(namespace.name)), 'Dbx{}Routes * _Nonnull'.format(fmt_camel_upper(namespace.name))))
+
+            self.emit()
 
     def _generate_routes_m(self, namespace):
         """Generates implementation file for namespace object that has as methods
@@ -213,7 +215,7 @@ class ObjCGenerator(ObjCBaseGenerator):
         self.emit_wrapped_text('Routes for the {} namespace'.format(fmt_class(namespace.name)), prefix=comment_prefix)
 
         with self.block_h('Dbx{}Routes'.format(fmt_class(namespace.name))):
-            self.emit(fmt_signature('init', fmt_func_args_declaration([('client', '{} * _Nonnull'.format(self.args.transport_client_name))]), 'nonnull instancetype'))
+            self.emit('{};'.format(fmt_signature('init', fmt_func_args_declaration([('client', '{} * _Nonnull'.format(self.args.transport_client_name))]), 'nonnull instancetype')))
             self.emit()
 
             for route in namespace.routes:
@@ -232,12 +234,14 @@ class ObjCGenerator(ObjCBaseGenerator):
         arg_list.append(('success', 'void (^ _Nullable)({})'.format(result_type)))
         arg_list.append(('fail', 'void (^ _Nullable)(DropboxError * _Nonnull error)'))
 
+        deprecated = 'DEPRECATED: ' if route.deprecated else ''
+
         self.emit(comment_prefix)
         if route.doc:
             route_doc = self.process_doc(route.doc, self._docf)
         else:
             route_doc = 'The {} route'.format(func_name)
-        self.emit_wrapped_text(route_doc, prefix=comment_prefix, width=120)
+        self.emit_wrapped_text(deprecated + route_doc, prefix=comment_prefix, width=120)
         self.emit(comment_prefix)
 
         for name, doc in doc_list:
@@ -252,8 +256,19 @@ class ObjCGenerator(ObjCBaseGenerator):
 
         args_str = fmt_func_args_declaration(arg_list)
 
-        self.emit(fmt_signature(fmt_var(route.name), args_str, 'void'))
+        deprecated = self._get_deprecation_warning(route)
+        self.emit('{}{};'.format(fmt_signature(fmt_var(route.name), args_str, 'void'), deprecated))
         self.emit()
+
+    def _get_deprecation_warning(self, route):
+        result = ''
+        if route.deprecated:
+            msg = '{} is deprecated.'.format(route.name)
+            if route.deprecated.by:
+                msg += ' Use {}.'.format(route.deprecated.by.name)
+            args = ["'{}'".format(msg), 'DeprecationWarning']
+            result = ' __deprecated_msg("{}")'.format(msg)
+        return result
 
     def _get_route_args(self, namespace, route):
         """Returns a list of name / value string pairs representing the arguments for

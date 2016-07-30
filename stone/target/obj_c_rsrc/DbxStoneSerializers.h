@@ -13,6 +13,8 @@
 
 + (id _Nonnull)deserialize:(NSDictionary * _Nonnull)dict;
 
+- (NSString * _Nonnull)description;
+
 @end
 
 
@@ -56,7 +58,7 @@
 
 + (NSString * _Nonnull)serialize:(NSDate * _Nonnull)value dateFormat:(NSString * _Nonnull)dateFormat;
 
-+ (NSDate * _Nonnull)deserialize:(NSString * _Nonnull)value dateFormat:(NSString *)dateFormat;
++ (NSDate * _Nonnull)deserialize:(NSString * _Nonnull)value dateFormat:(NSString * _Nonnull)dateFormat;
 
 @end
 

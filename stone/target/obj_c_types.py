@@ -39,6 +39,7 @@ from stone.target.obj_c_helpers import (
     fmt_property,
     fmt_property_str,
     fmt_public_name,
+    fmt_serial_class,
     fmt_serial_obj,
     fmt_signature,
     fmt_type,
@@ -149,7 +150,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self.emit()
         self.emit()
 
-        with self.block_m('{}Serializer'.format(struct_name)):
+        with self.block_m(fmt_serial_class(struct_name)):
             self._generate_struct_serializer(struct)
             self._generate_struct_deserializer(struct)
 
@@ -171,7 +172,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self.emit()
         self.emit()
 
-        with self.block_h('{}Serializer'.format(struct_name)):
+        with self.block_h(fmt_serial_class(struct_name)):
             self._generate_struct_serializer_signatures(struct_name)
 
     def _generate_union_class_m(self, union):
@@ -190,7 +191,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self.emit()
         self.emit()
 
-        with self.block_m('{}Serializer'.format(union_name)):
+        with self.block_m(fmt_serial_class(union_name)):
             self._generate_union_serializer(union)
             self._generate_union_deserializer(union)
 
@@ -214,7 +215,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         self.emit()
         self.emit()
 
-        with self.block_h('{}Serializer'.format(union_name)):
+        with self.block_h(fmt_serial_class(union_name)):
             self._generate_struct_serializer_signatures(union_name)
 
     def _generate_struct_cstor(self, struct):
@@ -262,7 +263,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         signature = fmt_signature(self._cstor_name_from_fields(fields),
             self._cstor_args_from_fields(fields, is_struct=True), 'nonnull instancetype')
 
-        self.emit(signature)
+        self.emit('{};'.format(signature))
         self.emit()
 
     def _generate_struct_cstor_signature_default(self, struct):
@@ -275,7 +276,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         signature = fmt_signature(self._cstor_name_from_fields(fields_no_default),
             self._cstor_args_from_fields(fields_no_default, is_struct=True), 'nonnull instancetype')
 
-        self.emit(signature)
+        self.emit('{};'.format(signature))
         self.emit()
 
     def _generate_union_cstor_funcs(self, fields, union, union_name):
@@ -299,7 +300,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         for field in fields:
             signature = fmt_signature(self._cstor_name_from_field(field),
                 self._cstor_args_from_fields([field] if not is_void_type(field.data_type) else []), 'nonnull instancetype')
-            self.emit(signature)
+            self.emit('{};'.format(signature))
             self.emit()
 
     def _generate_union_tag_state(self, fields, union, union_name):
@@ -315,13 +316,13 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         """Emits the two struct/union functions that implement the `Serializable` protocol."""
         with self.block_func('serialize', fmt_func_args_declaration([('obj', 'id')]),
                 'NSDictionary *', class_method=True):
-            self.emit('return [{}Serializer serialize:{}];'.format(data_type_name, fmt_func_args([('obj', 'obj')])))
+            self.emit('return {};'.format(fmt_func_call(fmt_serial_class(data_type_name), 'serialize', fmt_func_args([('obj', 'obj')]))))
 
         self.emit()
 
         with self.block_func('deserialize', fmt_func_args_declaration([('dict', 'NSDictionary *')]),
                 'id', class_method=True):
-            self.emit('return [{}Serializer deserialize:{}];'.format(data_type_name, fmt_func_args([('dict', 'dict')])))
+            self.emit('return {};'.format(fmt_func_call(fmt_serial_class(data_type_name), 'deserialize', fmt_func_args([('dict', 'dict')]))))
         self.emit()
 
     def _generate_serializable_signatures(self):
@@ -332,9 +333,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         deserial_signature = fmt_signature('deserialize',
             fmt_func_args_declaration([('dict', 'NSDictionary * _Nonnull')]), 'id _Nonnull', class_method=True)
 
-        self.emit(serial_signature)
+        self.emit('{};'.format(serial_signature))
         self.emit()
-        self.emit(deserial_signature)
+        self.emit('{};'.format(deserial_signature))
         self.emit()
 
     def _generate_struct_serializer_signatures(self, struct_name):
@@ -345,19 +346,19 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         deserial_signature = fmt_signature('deserialize',
             fmt_func_args_declaration([('dict', 'NSDictionary * _Nonnull')]), '{} * _Nonnull'.format(struct_name), class_method=True)
 
-        self.emit(serial_signature)
+        self.emit('{};'.format(serial_signature))
         self.emit()
-        self.emit(deserial_signature)
+        self.emit('{};'.format(deserial_signature))
         self.emit()
 
     def _generate_description_signature(self):
         signature = fmt_signature('description', [], 'NSString * _Nonnull')
-        self.emit(signature)
+        self.emit('{};'.format(signature))
         self.emit()
 
     def _generate_description_func(self, data_type_name):
         with self.block_func('description', [], 'NSString *'):
-            self.emit('return [[{}Serializer serialize:{}] description];'.format(data_type_name, fmt_func_args([('valueObj', 'self')])))
+            self.emit('return {};'.format(fmt_func_call(fmt_func_call(fmt_serial_class(data_type_name), 'serialize', fmt_func_args([('valueObj', 'self')])), 'description')))
 
         self.emit()
 
@@ -424,10 +425,10 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                 )
 
         if validator:
-            validator = '[DbxStoneValidators {}]'.format(validator)
+            validator = fmt_func_call('DbxStoneValidators', validator)
 
             if nullable:
-                validator = "[DbxStoneValidators nullableValidator:{}]".format(validator)
+                validator = fmt_func_call('DbxStoneValidators', 'nullableValidator', validator)
         
         return validator
 
@@ -459,7 +460,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     tag = tags[0]
 
                     with self.block('if ([valueObj isKindOfClass:[{} class]])'.format(fmt_class_prefix(subtype))):
-                        self.emit('NSDictionary *subTypeFields = [{}Serializer serialize:valueObj];'.format(fmt_class_prefix(subtype)))
+                        self.emit('NSDictionary *subTypeFields = [{} serialize:({} *)valueObj];'.format(fmt_serial_class(fmt_class_prefix(subtype)), fmt_class_prefix(subtype)))
                         with self.block('for (NSString* key in subTypeFields)'):
                             self.emit('jsonDict[key] = subTypeFields[key];')
                         self.emit('jsonDict[@".tag"] = @"{}";'.format(fmt_var(tag)))
@@ -496,7 +497,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                     tag = tags[0]
 
                     with self.block('if ([valueDict[@".tag"] isEqualToString:@"{}"])'.format(fmt_var(tag))):
-                        self.emit('return [{}Serializer deserialize:valueDict];'.format(fmt_class_prefix(subtype)))
+                        self.emit('return [{} deserialize:valueDict];'.format(fmt_serial_class(fmt_class_prefix(subtype))))
 
                 self.emit()
                 self._generate_throw_error('InvalidTagEnum', 'Supplied tag enum has an invalid value.')
@@ -513,10 +514,7 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
 
             first_block = True
             for field in union.all_fields:
-                if first_block:
-                    first_block = False
-
-                with self.block('{} ([valueObj is{}])'.format(if first_block else 'else if', fmt_camel_upper(field.name))):                    
+                with self.block('{} ([valueObj is{}])'.format('if' if first_block else 'else if', fmt_camel_upper(field.name))):                    
                     data_type, nullable = unwrap_nullable(field.data_type)
                     input_value = 'valueObj.{}'.format(fmt_var(field.name))
                     serialize_call = self._fmt_serialization_call(field.data_type, input_value, True)
@@ -529,6 +527,9 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
                                 self.emit('jsonDict[@"{}"] = {};'.format(field.name, serialize_call))
 
                     self.emit('jsonDict[@".tag"] = @"{}";'.format(field.name))
+
+                if first_block:
+                    first_block = False
 
             with self.block('else'):                    
                 self._generate_throw_error('InvalidTagEnum', 'Supplied tag enum has an invalid value.')
@@ -665,18 +666,18 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
             with self.block_h('Dbx{}RouteObjects'.format(namespace_name)):
                 for route in namespace.routes:
                     route_name = 'dbx{}{}'.format(fmt_camel_upper(namespace.name), fmt_camel_upper(route.name))
-                    self.emit(fmt_signature(route_name, None, 'DbxRoute *', True))
+                    self.emit('{};'.format(fmt_signature(route_name, None, 'DbxRoute *', True)))
                     self.emit()
 
     def _generate_union_tag_access_signatures(self, fields, union, union_name):
         """Emits the `is<TAG_NAME>` methods and `getTagName` method signatures for 
         determining tag state and retrieving human-readable value of tag state, respectively."""
         for field in fields:
-            self.emit(fmt_signature('is{}'.format(fmt_camel_upper(field.name)), [], 'BOOL'))
+            self.emit('{};'.format(fmt_signature('is{}'.format(fmt_camel_upper(field.name)), [], 'BOOL')))
             self.emit()
 
         enum_type = fmt_enum_name('tag', union)
-        self.emit(fmt_signature('getTagName', None, 'NSString * _Nonnull'))
+        self.emit('{};'.format(fmt_signature('getTagName', None, 'NSString * _Nonnull')))
         self.emit()
 
     def _generate_union_tag_state_funcs(self, fields, union, union_name):

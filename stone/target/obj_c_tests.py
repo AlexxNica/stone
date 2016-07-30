@@ -71,6 +71,9 @@ class ObjCTestGenerator(ObjCBaseGenerator):
             self.emit()
 
             with self.block_m('DbxSerializationTests'):
+
+                with self.block_func('checkError', fmt_func_args_declaration([('originalObj', 'id'), ('outputObj', 'id')])):
+                    self.emit('NSAssert(([[originalObj description] isEqual:[outputObj description]]), @"\\nSerialization and deserialization failed to preserve object data:\\n\\nBefore:\\n %@ \\n\\nAfter:\\n %@.\\n\\n", originalObj, outputObj);')
                 for namespace in api.namespaces.values():
                     self._generate_namespace_tests(namespace)
 
@@ -106,7 +109,7 @@ class ObjCTestGenerator(ObjCBaseGenerator):
                             #     print()
 
                             field_name = fmt_var(field.name)
-                            
+
                             if field.name in example_data:
                                 example_value = fmt_literal(example_data[field.name], field_data_type)
                                 example_value = example_value.replace('\n', '')
@@ -150,15 +153,15 @@ class ObjCTestGenerator(ObjCBaseGenerator):
                                         self.emit('{} *obj = {};'.format(fmt_class_prefix(subtype), fmt_literal(example_data, subtype)))
                                         self.emit('NSData *serializedData = [DropboxTransportClient jsonDataWithDictionary:[{} serialize:obj]];'.format(fmt_class_prefix(subtype)))
                                         self.emit('id jsonObj = [NSJSONSerialization JSONObjectWithData:serializedData options:NSJSONReadingMutableContainers error:nil];')
-                                        self.emit('{} *deserializedObj = [{} deserialize:jsonObj];'.format(fmt_class_prefix(subtype), fmt_class_prefix(subtype)))
-                                        self.emit('NSAssert(([[obj description] isEqual:[deserializedObj description]]), @"\\nSerialization and deserialization failed to preserve object data:\\n\\nBefore:\\n %@ \\n\\nAfter:\\n %@.\\n\\n", obj, deserializedObj);')
+                                        self.emit('{} *outputObj = [{} deserialize:jsonObj];'.format(fmt_class_prefix(subtype), fmt_class_prefix(subtype)))
+                                        self.emit('[self checkError:obj outputObj:outputObj];')
 
                             else:   
                                 self.emit('{} *obj = {};'.format(fmt_class_prefix(data_type), fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)), self._cstor_name_from_fields_names(result), args_str)))
                                 self.emit('NSData *serializedData = [DropboxTransportClient jsonDataWithDictionary:[{} serialize:obj]];'.format(fmt_class_prefix(data_type)))
                                 self.emit('id jsonObj = [NSJSONSerialization JSONObjectWithData:serializedData options:NSJSONReadingMutableContainers error:nil];')
-                                self.emit('{} *deserializedObj = [{} deserialize:jsonObj];'.format(fmt_class_prefix(data_type), fmt_class_prefix(data_type)))
-                                self.emit('NSAssert(([[obj description] isEqual:[deserializedObj description]]), @"\\nSerialization and deserialization failed to preserve object data:\\n\\nBefore:\\n %@ \\n\\nAfter:\\n %@.\\n\\n", obj, deserializedObj);')
+                                self.emit('{} *outputObj = [{} deserialize:jsonObj];'.format(fmt_class_prefix(data_type), fmt_class_prefix(data_type)))
+                                self.emit('[self checkError:obj outputObj:outputObj];')
                     self.emit()
     
     def _field_type_from_field_name(self, field_name, data_type):

@@ -334,12 +334,15 @@ def fmt_serial_obj(data_type):
     data_type, nullable = unwrap_nullable(data_type)
 
     if is_user_defined_type(data_type):
-        result = 'Dbx{}{}Serializer'.format(fmt_camel_upper(data_type.namespace.name), fmt_class(data_type.name))
+        result = fmt_serial_class(fmt_class_prefix(data_type))
     else:
         result = _serial_table.get(data_type.__class__, fmt_class(data_type.name))
 
     return result
 
+
+def fmt_serial_class(class_name):
+    return '{}Serializer'.format(class_name)
 
 def fmt_func_args(arg_str_pairs, standard=False):
     result = []
@@ -377,7 +380,7 @@ def fmt_func_args_from_fields(args):
     return ' '.join(result)
 
 
-def fmt_func_call(func_caller, func_name, func_args):
+def fmt_func_call(func_caller, func_name, func_args=None):
     if func_args:
         result = '[{} {}:{}]'.format(func_caller, func_name, func_args)
     else:
@@ -409,9 +412,9 @@ def fmt_default_value(field):
 def fmt_signature(func_name, fields, return_type, class_method=False):
     modifier = '-' if not class_method else '+'
     if fields:
-        result = '{} ({}){}:{};'.format(modifier, return_type, func_name, fields)
+        result = '{} ({}){}:{}'.format(modifier, return_type, func_name, fields)
     else:
-        result = '{} ({}){};'.format(modifier, return_type, func_name)
+        result = '{} ({}){}'.format(modifier, return_type, func_name)
 
     return result
 
@@ -426,7 +429,7 @@ def fmt_var(name):
 
 
 def fmt_property(field, is_union=False):
-    attrs = ['nonatomic']
+    attrs = ['nonatomic', 'copy']
     base_string = '@property ({}) {} {};'
 
     return base_string.format(', '.join(attrs), fmt_type(field.data_type, tag=True), fmt_var(field.name))
