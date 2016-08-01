@@ -78,11 +78,15 @@ _validator_table = {
 }
 
 
-_true_primitives = {
+_wrapper_primitives = {
     Boolean,
-    # Float64,
-    # UInt32,
-    # UInt64,
+    Float32,
+    Float64,
+    UInt32,
+    UInt64,
+    Int32,
+    Int64,
+    String,
 }
 
 
@@ -175,10 +179,13 @@ def fmt_camel(name, upper_first=False, reserved=True, prefixes=False):
     return ret
 
 def fmt_enum_name(field_name, union):
-    return '{}{}{}'.format(fmt_camel_upper(union.namespace.name), fmt_camel_upper(union.name), fmt_camel_upper(field_name))
+    return '{}{}{}'.format(fmt_camel_upper(union.namespace.name),
+                           fmt_camel_upper(union.name),
+                           fmt_camel_upper(field_name))
 
 def fmt_camel_upper(name, reserved=True):
     return fmt_camel(name, upper_first=True, reserved=reserved)
+
 
 def fmt_public_name(name):
     return fmt_camel_upper(name)
@@ -211,19 +218,13 @@ def fmt_type(data_type, tag=False, has_default=False):
     data_type, nullable = unwrap_nullable(data_type)
 
     if is_user_defined_type(data_type):
-        result = 'Dbx{}{} *'.format(fmt_class(data_type.namespace.name), fmt_class(data_type.name))
+        result = '{} *'.format(fmt_class_prefix(data_type))
     else:
         result = _primitive_table.get(data_type.__class__, fmt_class(data_type.name))
         
         if is_list_type(data_type):
             data_type, _ = unwrap_nullable(data_type.data_type)
-            if data_type.__class__ in _true_primitives:
-                if nullable or has_default:
-                    result = result + ' * _Nullable'
-                else:
-                    result = result + ' * _Nonnull'
-            else:
-                result = result + '<{}> *'.format(fmt_type(data_type)) 
+            result = result + '<{}> *'.format(fmt_type(data_type)) 
     
     if tag:
         if nullable or has_default:
@@ -235,95 +236,8 @@ def fmt_type(data_type, tag=False, has_default=False):
 
 
 def fmt_class_prefix(data_type):
-    return 'Dbx{}{}'.format(fmt_class(data_type.namespace.name), fmt_class(data_type.name))
-
-
-def fmt_literal(example_value, data_type):    
-    data_type, nullable = unwrap_nullable(data_type)
-
-    result = example_value
-
-    if is_user_defined_type(data_type):
-        obj_args = []
-
-        if is_union_type(data_type):
-            example_tag = example_value['.tag']
-
-
-
-            for field in data_type.all_fields:
-                if field.name == example_tag:
-                    if not is_void_type(field.data_type):
-                        if field.name in example_value:
-                            obj_args.append((fmt_var(field.name), fmt_literal(example_value[field.name], field.data_type)))
-                        else:
-                            obj_args.append((fmt_var(field.name), fmt_literal(example_value, field.data_type)))
-
-            result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)),
-                'initWith{}'.format(fmt_camel_upper(example_value['.tag'])), fmt_func_args(obj_args))
-        else:
-            if data_type.has_enumerated_subtypes():
-                for tags, subtype in data_type.get_all_subtypes_with_tags():
-                    assert len(tags) == 1, tags
-                    tag = tags[0]
-                    if tag == example_value['.tag']:
-                        result = fmt_literal(example_value, subtype)
-            else:
-                for field in data_type.all_fields:
-                    if field.name in example_value:
-                        obj_args.append((fmt_var(field.name), fmt_literal(example_value[field.name], field.data_type)))
-                    else:
-                        if not is_void_type(field.data_type):
-                            obj_args.append((fmt_var(field.name), fmt_default(field.data_type)))
-                result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)),
-                    'initWith{}'.format(fmt_camel_upper(data_type.all_fields[0].name)), fmt_func_args(obj_args))
-    elif is_list_type(data_type):
-        if example_value:
-            result = '@[{}]'.format(fmt_literal(example_value[0], data_type.data_type))
-        else:
-            result = 'nil'
-    elif is_numeric_type(data_type):
-        if is_float_type(data_type):
-            result = '[NSNumber numberWithDouble:{}]'.format(example_value)
-        elif isinstance(data_type, (UInt64, Int64)):
-            result = '[NSNumber numberWithLong:{}]'.format(example_value)
-        else:
-            result = '[NSNumber numberWithInt:{}]'.format(example_value)
-    elif is_timestamp_type(data_type):
-        result = '[DbxNSDateSerializer deserialize:@"{}" dateFormat:@"{}"]'.format(example_value, data_type.format)
-    elif is_string_type(data_type):
-        result = '@"{}"'.format(result)
-    elif is_boolean_type(data_type):
-        result = '@YES' if bool(example_value) else '@NO'
-
-    return str(result)
-
-
-def fmt_default(data_type):
-    data_type, nullable = unwrap_nullable(data_type)
-
-    result = 'DEFAULT'
-
-    if nullable:
-        return 'nil'
-
-    if is_user_defined_type(data_type):
-        result = fmt_func_call(fmt_alloc_call(fmt_class_prefix(data_type)), 'init', [])
-    elif is_list_type(data_type):
-        result = fmt_func_call(fmt_alloc_call('NSArray'), 'init', [])
-    elif is_numeric_type(data_type):
-        if is_float_type(data_type):
-            result = '[NSNumber numberWithDouble:5]'
-        else:
-            result = '[NSNumber numberWithInt:5]'
-    elif is_timestamp_type(data_type):
-        result = '[[NSDateFormatter new] setDateFormat:[self convertFormat:@"test"]]'
-    elif is_string_type(data_type):
-        result = '@"teststring"'
-    elif is_boolean_type(data_type):
-        result = '@YES'
-
-    return result
+    return 'Dbx{}{}'.format(fmt_class(data_type.namespace.name),
+                            fmt_class(data_type.name))
 
 
 def fmt_validator(data_type):
@@ -344,11 +258,24 @@ def fmt_serial_obj(data_type):
 def fmt_serial_class(class_name):
     return '{}Serializer'.format(class_name)
 
-def fmt_func_args(arg_str_pairs, standard=False):
+
+def fmt_route_obj_class(namespace_name):
+    return 'Dbx{}RouteObjects'.format(fmt_camel_upper(namespace_name))
+
+
+def fmt_routes_class(namespace_name):
+    return 'Dbx{}Routes'.format(fmt_class(namespace_name))
+
+
+def fmt_route_var(namespace_name, route_name):
+    return 'dbx{}{}'.format(fmt_camel_upper(namespace_name), fmt_camel_upper(route_name))
+
+
+def fmt_func_args(arg_str_pairs):
     result = []
     first_arg = True
     for arg_name, arg_value in arg_str_pairs:
-        if first_arg and not standard:
+        if first_arg:
             result.append('{}'.format(arg_value))
             first_arg = False
         else:
@@ -380,16 +307,16 @@ def fmt_func_args_from_fields(args):
     return ' '.join(result)
 
 
-def fmt_func_call(func_caller, func_name, func_args=None):
-    if func_args:
-        result = '[{} {}:{}]'.format(func_caller, func_name, func_args)
+def fmt_func_call(caller, callee, args=None):
+    if args:
+        result = '[{} {}:{}]'.format(caller, callee, args)
     else:
-        result = '[{} {}]'.format(func_caller, func_name)
+        result = '[{} {}]'.format(caller, callee)
 
     return result
 
-def fmt_alloc_call(class_name):
-    return '[{} alloc]'.format(class_name)
+def fmt_alloc_call(caller):
+    return '[{} alloc]'.format(caller)
 
 
 def fmt_default_value(field):
@@ -409,27 +336,29 @@ def fmt_default_value(field):
         raise TypeError('Can\'t handle default value type %r' % type(field.data_type))
 
 
-def fmt_signature(func_name, fields, return_type, class_method=False):
-    modifier = '-' if not class_method else '+'
-    if fields:
-        result = '{} ({}){}:{}'.format(modifier, return_type, func_name, fields)
+def fmt_signature(func, args, return_type='void', class_func=False):
+    modifier = '-' if not class_func else '+'
+    if args:
+        result = '{} ({}){}:{}'.format(modifier, return_type, func, args)
     else:
-        result = '{} ({}){}'.format(modifier, return_type, func_name)
+        result = '{} ({}){}'.format(modifier, return_type, func)
 
     return result
 
 
 def is_primitive_type(data_type):
     data_type, _ = unwrap_nullable(data_type)
-    return data_type.__class__ in _true_primitives
+    return data_type.__class__ in _wrapper_primitives
 
 
 def fmt_var(name):
     return fmt_camel(name)
 
 
-def fmt_property(field, is_union=False):
-    attrs = ['nonatomic', 'copy']
+def fmt_property(field):
+    attrs = ['nonatomic']
+    if is_primitive_type(field.data_type):
+        attrs.append('copy')
     base_string = '@property ({}) {} {};'
 
     return base_string.format(', '.join(attrs), fmt_type(field.data_type, tag=True), fmt_var(field.name))
@@ -438,10 +367,12 @@ def fmt_property(field, is_union=False):
 def fmt_import(header_file):
     return '#import "{}.h"'.format(header_file)
 
-def fmt_property_str(prop_name, prop_type):
-    attrs = ['nonatomic']
+
+def fmt_property_str(prop, typ, attrs=None):
+    if not attrs:
+        attrs = ['nonatomic']
     base_string = '@property ({}) {} {};'
-    return base_string.format(', '.join(attrs), prop_type, prop_name)
+    return base_string.format(', '.join(attrs), typ, prop)
 
 
 def is_ptr_type(data_type):

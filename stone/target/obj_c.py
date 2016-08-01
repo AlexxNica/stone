@@ -122,8 +122,8 @@ class ObjCBaseGenerator(CodeGenerator):
         self.emit('return self;')
 
     @contextmanager
-    def block_func(self, func, args=[], return_type='void', class_method=False):
-        modifier = '-' if not class_method else '+'
+    def block_func(self, func, args=[], return_type='void', class_func=False):
+        modifier = '-' if not class_func else '+'
         base_string = '{} ({}){}:{}' if args else '{} ({}){}'
         signature = base_string.format(modifier, return_type, func, args)
         with self.block(signature):
