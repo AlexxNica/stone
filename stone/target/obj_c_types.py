@@ -466,12 +466,10 @@ class ObjCTypesGenerator(ObjCBaseGenerator):
         if validator:
             validator = fmt_func_call(caller='DbxStoneValidators',
                                       callee=validator)
-
             if nullable:
                 validator = fmt_func_call(caller='DbxStoneValidators',
                                           callee='nullableValidator',
                                           args=validator)
-        
         return validator
 
     def _generate_struct_serializer(self, struct):
