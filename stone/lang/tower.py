@@ -46,6 +46,7 @@ from ..data_type import (
     UserDefined,
     Void,
     unwrap_aliases,
+    unwrap_nullable,
 )
 
 from .exception import InvalidSpec
@@ -56,10 +57,12 @@ from .parser import (
     StoneParser,
     StoneRouteDef,
     StoneStructDef,
+    StoneStructPatch,
     StoneTagRef,
     StoneTypeDef,
     StoneTypeRef,
     StoneUnionDef,
+    StoneUnionPatch,
     StoneVoidField,
 )
 
@@ -123,6 +126,12 @@ class TowerOfStone(object):
 
         self._item_by_canonical_name = {}
 
+        self._patches = []
+
+        self._item_name_to_item = {}
+
+        self._route_items = []
+
     def parse(self):
         """Parses the text of each spec and returns an API description. Returns
         None if an error was encountered during parsing."""
@@ -147,6 +156,7 @@ class TowerOfStone(object):
                 self._logger.info('Empty spec: %s', path)
 
         self._add_imports_to_env(raw_api)
+        self._resolve_patches()
         self._populate_type_attributes()
         self._populate_field_defaults()
         self._populate_enumerated_subtypes()
@@ -207,26 +217,31 @@ class TowerOfStone(object):
             if isinstance(item, StoneTypeDef):
                 api_type = self._create_type(env, item)
                 namespace.add_data_type(api_type)
-                self._check_canonical_name_available(item, namespace.name)
+                self._enforce_canonical_name_available(item, namespace.name)
+                self._item_name_to_item[item.name] = (item, namespace, env)
             elif isinstance(item, StoneRouteDef):
                 route = self._create_route(env, item)
                 namespace.add_route(route)
-                self._check_canonical_name_available(item, namespace.name)
+                self._enforce_canonical_name_available(item, namespace.name)
+                self._route_items.append((item, namespace, env))
             elif isinstance(item, StoneImport):
                 # Handle imports later.
                 pass
+            elif isinstance(item, StoneStructPatch) or isinstance(item, StoneUnionPatch):
+                # Handle patches later.
+                self._patches.append((item, namespace, env))
             elif isinstance(item, StoneAlias):
                 alias = self._create_alias(env, item)
                 namespace.add_alias(alias)
-                self._check_canonical_name_available(item, namespace.name)
+                self._enforce_canonical_name_available(item, namespace.name)
             else:
                 raise AssertionError('Unknown Stone Declaration Type %r' %
                                      item.__class__.__name__)
 
-    def _check_canonical_name_available(self, item, namespace_name):
+    def _enforce_canonical_name_available(self, item, namespace_name):
         base_name = self._get_base_name(item.name, namespace_name)
 
-        if base_name not in self._item_by_canonical_name.keys():
+        if self._check_canonical_name_available(item, namespace_name):
             self._item_by_canonical_name[base_name] = item
         else:
             stored_item = self._item_by_canonical_name[base_name]
@@ -239,6 +254,10 @@ class TowerOfStone(object):
                 stored_item.path, stored_item.lineno)
 
             raise InvalidSpec(msg, item.lineno, item.path)
+
+    def _check_canonical_name_available(self, item, namespace_name):
+        base_name = self._get_base_name(item.name, namespace_name)
+        return base_name not in self._item_by_canonical_name.keys()
 
     @classmethod
     def _get_user_friendly_item_type_as_string(cls, item):
@@ -307,7 +326,11 @@ class TowerOfStone(object):
         env[item.name] = alias
         return alias
 
-    def _create_type(self, env, item):
+    def _create_type(self, env, item, patch=False):
+        # if patch:
+        #     if item:
+        #         print(item.name)
+        #     return
         """Create a forward reference for a union or struct."""
         if item.name in env:
             existing_dt = env[item.name]
@@ -330,7 +353,127 @@ class TowerOfStone(object):
             raise AssertionError('Unknown type definition %r' % type(item))
 
         env[item.name] = api_type
+
         return api_type
+
+    def _resolve_patches(self):
+        _already_defined = {}
+        _already_defined_subtype = {}
+
+        for patched_item, patched_namespace, patched_env in self._patches:
+            if patched_item.name not in patched_env:
+                raise InvalidSpec(
+                        'Patch %s must correspond to a pre-existing data_type.' %
+                        (quote(patched_item.name)), patched_item.lineno, patched_item.path)
+            else:
+                existing_dt = patched_env[patched_item.name]
+                if isinstance(patched_item, StoneStructPatch):
+                    if isinstance(existing_dt, StoneStructDef):
+                        raise InvalidSpec(
+                            'Patch %s corresponds to a pre-existing data_type that is not a struct.' %
+                            (quote(patched_item.name)), patched_item.lineno, patched_item.path)
+
+                for _, tup in self._item_name_to_item.iteritems():
+                    item, namespace, env = tup
+                    if isinstance(item, StoneTypeDef):
+                        if item.name == patched_item.name:
+                            new_main_name = item.name + 'Internal'
+
+                            item_to_use = item
+                            
+                            if new_main_name in _already_defined:
+                                item_to_use, _, _ = _already_defined[new_name]
+
+
+                            item_copy = copy.deepcopy(item_to_use)
+                            item_copy.name = new_main_name
+                            item_copy.fields += patched_item.fields
+
+                            if isinstance(patched_item, StoneStructPatch):
+                                new_subtypes = []
+                                for subtype in item_copy.subtypes[0]:
+                                    old_name = subtype.type_ref.name
+                                    new_old_name = subtype.type_ref.name + 'Internal'
+                                    old_item_to_use, _, env = self._item_name_to_item[old_name]
+
+                                    if new_old_name in _already_defined:
+                                        old_item_to_use, _, _ = _already_defined[new_name]
+
+                                    subtype.type_ref.name = new_old_name
+
+                                    new_item = copy.deepcopy(old_item_to_use)
+                                    new_item.name = new_old_name
+                                    new_item.extends.name += 'Internal'
+
+                                    for key, val in patched_item.examples.iteritems():
+                                        stone_example = patched_item.examples[key]
+                                        if key in new_item.examples:
+                                            for field_name, field_type in stone_example.fields.iteritems():
+                                                new_item.examples[key].fields[field_name] = field_type
+                                                _already_defined_subtype[new_old_name] = (new_item, namespace, env)
+
+                                    new_subtypes.append(subtype)
+                                item_copy.subtypes = (new_subtypes, item_copy.subtypes[1])
+
+                            _already_defined[new_main_name] = (item_copy, namespace, env)
+                        else:
+                            new_name = item.name + 'Internal'
+
+                            item_to_use = item
+                            if new_name in _already_defined:
+                                item_to_use, _, _ = _already_defined[new_name]
+
+                            indexes = []
+                            for p_i, _, _ in self._patches:
+                                for i, field in enumerate(item_to_use.fields):
+                                    if not isinstance(field, StoneVoidField) and field.type_ref.name == p_i.name:
+                                        indexes.append(i)
+                            if indexes:
+                                item_copy = copy.deepcopy(item_to_use)
+                                item_copy.name = new_name
+
+                                for index in indexes:
+                                    item_copy.fields[index].type_ref.name += 'Internal'
+
+                                _already_defined[new_name] = (item_copy, namespace, env)
+
+        for key, val in _already_defined_subtype.iteritems():
+            item, namespace, env = _already_defined_subtype[key]
+            api_type = self._create_type(env, item, patch=True)
+            namespace.add_data_type(api_type)
+
+
+                                
+        for key, val in _already_defined.iteritems():
+            item, namespace, env = _already_defined[key]
+            api_type = self._create_type(env, item, patch=True)
+            namespace.add_data_type(api_type)
+
+        for route_item, _, _ in self._route_items:
+            arg_type_ref = route_item.arg_type_ref
+            arg_type_ref_name = arg_type_ref.name + 'Internal'
+
+            result_type_ref = route_item.result_type_ref
+            result_type_ref_name = result_type_ref.name + 'Internal'
+
+            error_type_ref = route_item.error_type_ref
+            error_type_ref_name = error_type_ref.name + 'Internal'
+
+            if arg_type_ref_name in _already_defined or result_type_ref_name in _already_defined or error_type_ref_name in _already_defined:
+                route_item_copy = copy.deepcopy(route_item)
+                route_item_copy.name += '_internal'
+                
+                if arg_type_ref_name in _already_defined:
+                    route_item_copy.arg_type_ref.name += 'Internal'
+
+                if result_type_ref_name in _already_defined:
+                    route_item_copy.result_type_ref.name += 'Internal'
+
+                if error_type_ref_name in _already_defined:
+                    route_item_copy.error_type_ref.name += 'Internal'
+
+                route = self._create_route(env, route_item_copy)
+                namespace.add_route(route)
 
     def _populate_type_attributes(self):
         """

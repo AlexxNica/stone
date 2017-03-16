@@ -1130,7 +1130,7 @@ class Struct(UserDefined):
             else:
                 raise InvalidSpec(
                     "Missing field '%s' in example." % field.name,
-                    example.lineno, example.path)
+                    example.lineno, self.name)
 
         self._raw_examples[example.label] = example
 
